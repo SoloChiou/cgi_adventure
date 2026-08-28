@@ -1,0 +1,37 @@
+:root { color-scheme: dark; --bg: #0a0d0b; --panel: #111813; --line: #33543b; --green: #8cff9b; --gold: #f2c85b; --text: #e4eee5; --muted: #91a694; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, #16241a 0, var(--bg) 45%); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.6; }
+a { color: var(--green); }
+.site-header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left)); background: rgba(6, 10, 7, .94); border-bottom: 1px solid var(--line); }
+.logo { color: var(--gold); font-weight: 800; text-decoration: none; letter-spacing: .08em; }
+nav { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
+nav a, .link-button { color: var(--text); background: none; border: 0; padding: 0; font: inherit; text-decoration: none; }
+main { width: min(960px, calc(100% - 2rem)); margin: 2rem auto; }
+footer { padding: 2rem max(1rem, env(safe-area-inset-right)) max(2rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); text-align: center; color: var(--muted); }
+h1 { color: var(--gold); font-size: clamp(1.8rem, 7vw, 3.2rem); line-height: 1.1; margin: .2rem 0 .8rem; text-shadow: 2px 2px #332b0e; }
+h2 { margin-top: 2.2rem; } h3 { color: var(--green); }
+.eyebrow { color: var(--green); letter-spacing: .15em; font-size: .78rem; }
+.panel { border: 1px solid var(--line); background: linear-gradient(145deg, rgba(20, 31, 23, .95), rgba(10, 15, 11, .95)); padding: 1.2rem; box-shadow: 4px 4px 0 #050705; }
+.narrow { max-width: 520px; margin: 8vh auto; }
+.hero { display: flex; justify-content: space-between; gap: 1rem; align-items: end; padding-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
+.resources { display: flex; flex-wrap: wrap; justify-content: end; gap: .5rem; }
+.resources span { border: 1px solid var(--line); padding: .35rem .6rem; color: var(--green); background: #080c09; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }
+.area-card, .item-card { display: flex; flex-direction: column; align-items: start; }
+.area-card form { margin-top: auto; width: 100%; }
+button, .button { display: inline-block; border: 1px solid var(--green); background: #173e20; color: #fff; padding: .7rem 1rem; font: inherit; cursor: pointer; text-decoration: none; }
+button:hover, .button:hover { background: #245c30; }
+.stack p { display: grid; gap: .3rem; }
+input { width: 100%; border: 1px solid var(--line); background: #070b08; color: var(--text); padding: .7rem; font: inherit; }
+.message { border: 1px solid var(--line); margin-bottom: 1rem; padding: .8rem; }.message.error { border-color: #b94d4d; }.message.success { border-color: var(--green); }
+.battle-log { max-height: 70vh; margin-bottom: 1rem; overflow: auto; scroll-behavior: smooth; }
+.battle-log p { margin: 0; padding: .38rem 0; }
+.battle-opening { color: var(--green); }
+.battle-divider { color: var(--line); letter-spacing: .08em; }
+.battle-outcome { color: var(--gold); font-size: clamp(1.5rem, 6vw, 2.5rem); font-weight: 800; letter-spacing: .12em; text-shadow: 2px 2px #332b0e; }
+.battle-log.lose .battle-outcome { color: #ef7777; text-shadow: 2px 2px #3a1111; }
+.battle-line.is-revealed { animation: battle-line-in .3s ease-out; }
+.level-up { color: var(--gold); font-weight: bold; }.muted { color: var(--muted); }.inline-form { display: inline; }
+@keyframes battle-line-in { from { opacity: 0; transform: translateY(.35rem); } to { opacity: 1; transform: translateY(0); } }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); } table { width: 100%; border-collapse: collapse; background: var(--panel); } th, td { padding: .8rem; text-align: left; border-bottom: 1px solid var(--line); } th { color: var(--gold); }
+@media (max-width: 620px) { .site-header, .hero { align-items: flex-start; flex-direction: column; } .resources { justify-content: start; } main { margin-top: 1rem; } nav { font-size: .9rem; } }

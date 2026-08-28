@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">ADVENTURER STATUS</p>
+    <h1>{{ player.name }}</h1>
+    <p>{{ player.job.name }} · Lv.{{ player.level }} · 轉職 {{ player.job_count }} 次</p>
+  </div>
+  <div class="resources"><span>HP {{ player.hp }}/{{ player.max_hp }}</span><span>MP {{ player.mp }}/{{ player.max_mp }}</span><span>EXP {{ player.exp }}</span><span>{{ player.gold }} Gold</span></div>
+</section>
+
+<section>
+  <h2>選擇地區</h2>
+  <div class="card-grid">
+    {% for area in areas %}
+      <article class="panel area-card">
+        <p class="eyebrow">AREA {{ area.id }}</p>
+        <h3>{{ area.name }}</h3>
+        <p>{{ area.description }}</p>
+        <p class="muted">需求 Lv.{{ area.required_level }} · 冷卻 {{ area.cooldown_seconds }} 秒</p>
+        <form method="post" action="{% url 'game:battle' area.id %}">{% csrf_token %}<button type="submit">開始戰鬥</button></form>
+      </article>
+    {% empty %}<p>目前沒有可進入的地區。</p>{% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>近期戰績</h2>
+  <div class="panel">
+    {% for battle in recent_battles %}
+      <p><strong>{% if battle.result == 'win' %}勝利{% else %}敗北{% endif %}</strong> · {{ battle.monster_snapshot.name }} · {{ battle.created_at|date:"m/d H:i:s" }}</p>
+    {% empty %}<p class="muted">尚無戰鬥紀錄。</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

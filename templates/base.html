@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}CGI Adventure{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'game/style.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="{% url 'game:home' %}">CGI ADVENTURE</a>
+    <nav>
+      <a href="{% url 'game:home' %}">冒險</a>
+      <a href="{% url 'game:inventory' %}">背包</a>
+      <a href="{% url 'game:leaderboard' %}">排行榜</a>
+      {% if user.is_authenticated %}
+        <form action="{% url 'logout' %}" method="post" class="inline-form">{% csrf_token %}<button class="link-button">登出</button></form>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer>CGI Adventure · 第一版垂直切片</footer>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}登入 · CGI Adventure{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <p class="eyebrow">DEVELOPMENT ACCESS</p>
+  <h1>進入冒險</h1>
+  <p>目前使用開發環境帳號登入；正式環境將由經 LINE Platform 驗證的身分建立 Session。</p>
+  <form method="post" class="stack">{% csrf_token %}{{ form.as_p }}<button type="submit">登入</button></form>
+</section>
+{% endblock %}

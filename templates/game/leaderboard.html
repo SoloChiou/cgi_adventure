@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}排行榜 · CGI Adventure{% endblock %}
+{% block content %}
+<section><p class="eyebrow">RANKING</p><h1>冒險者排行榜</h1><div class="table-wrap"><table><thead><tr><th>名次</th><th>角色</th><th>職業</th><th>轉職</th><th>等級</th><th>累積 EXP</th></tr></thead><tbody>{% for player in players %}<tr><td>{{ forloop.counter }}</td><td>{{ player.name }}</td><td>{{ player.job.name }}</td><td>{{ player.job_count }}</td><td>{{ player.level }}</td><td>{{ player.exp }}</td></tr>{% empty %}<tr><td colspan="6">尚無冒險者</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

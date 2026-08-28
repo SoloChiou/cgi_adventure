@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}戰鬥結果 · CGI Adventure{% endblock %}
+{% block content %}
+<section class="battle-log panel {{ battle.result }}" data-battle-replay data-line-delay="550" aria-live="polite">
+  <p class="battle-line battle-opening">{{ battle.player_before.name }}遭遇了{{ battle.monster_snapshot.name }}！</p>
+  {% for round in battle.rounds %}
+    {% for event in round.events %}
+      {% if not event.hit %}
+        <p class="battle-line">{{ event.actor_name }} 的攻擊沒有命中。</p>
+      {% else %}
+        <p class="battle-line">{{ event.actor_name }} 攻擊 {{ event.target_name }}，{% if event.critical %}<strong>暴擊！</strong>{% endif %}造成 {{ event.damage }} 點傷害。（HP {{ event.hp_before }} → {{ event.hp_after }}）</p>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+
+  <p class="battle-line battle-divider" aria-hidden="true">＝＝＝＝＝＝＝＝＝＝＝＝</p>
+  <p class="battle-line battle-outcome">{% if battle.result == "win" %}YOU WIN{% else %}YOU LOSE{% endif %}</p>
+  <p class="battle-line">EXP +{{ battle.rewards.exp }}</p>
+  <p class="battle-line">Gold +{{ battle.rewards.gold }}</p>
+  {% if battle.rewards.proficiency %}<p class="battle-line">{{ battle.rewards.proficiency.weapon_type }}熟練度 +1</p>{% endif %}
+  {% for drop in battle.rewards.drops %}<p class="battle-line">掉落：【{{ drop.name }}】×{{ drop.quantity }}</p>{% endfor %}
+  {% for level in battle.rewards.level_ups %}<p class="battle-line level-up">LEVEL UP！Lv.{{ level }}</p>{% endfor %}
+  <p class="battle-line muted">Battle #{{ battle.battle_id }} · Seed {{ battle.random_seed }}</p>
+</section>
+<a class="button" href="{% url 'game:home' %}">返回城鎮</a>
+<script src="{% static 'game/battle_replay.js' %}" defer></script>
+{% endblock %}

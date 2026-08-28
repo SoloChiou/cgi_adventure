@@ -24,6 +24,8 @@
 
 ```text
 CGI Adventure
+<!-- ├─ 背景:中國鬼怪文學 -->
+│
 ├─ 類型：復古 CGI 風格的瀏覽器文字 RPG
 │  ├─ 玩家透過頁面、文字連結與按鈕操作
 │  ├─ 不需要角色即時移動
@@ -43,7 +45,7 @@ CGI Adventure
 └─ 戰鬥形式：一次請求完成整場模擬
    ├─ 玩家按一次「戰鬥」
    ├─ 後端從 Round 1 計算到分出勝負
-   └─ 頁面一次顯示完整戰鬥紀錄與獎勵
+   └─ 頁面依事件順序逐行顯示完整戰鬥紀錄，並在紀錄結尾顯示勝敗與獎勵
 ```
 
 第一版的核心目標是完成以下可重複遊玩的循環：
@@ -157,7 +159,7 @@ LINE App／External Browser
    │  ├─ LINE App 內：初始化 LIFF 並取得登入 token
    │  └─ 外部瀏覽器：偵測登入狀態並在需要時明確執行 LINE Login
    │
-   └─ Django Server-rendered HTML + 少量 JavaScript
+   └─ Python 3／Django Server-rendered HTML + CSS + 少量 JavaScript
       ├─ View / Form
       │  ├─ 驗證登入、輸入與權限
       │  └─ 呼叫應用服務，不直接計算戰鬥
@@ -176,11 +178,14 @@ LINE App／External Browser
       │  └─ 狀態驗證與數值上下限
       │
       └─ Database
-         ├─ 開發環境可使用 SQLite
-         └─ 部署時可遷移至 PostgreSQL
+         ├─ 標準本機環境：Docker Compose + PostgreSQL
+         ├─ 輕量替代環境：直接執行 Django + SQLite
+         └─ 部署環境：PostgreSQL
 ```
 
 第一版不需要 React、WebSocket、Redis、Celery、Service Message、LINE Pay、In-App Purchase 或 AI。戰鬥敘述先使用固定文字模板，以維持速度、成本與可預測性。
+
+標準本機環境使用 Docker Compose 統一 Python、Django 與 PostgreSQL 版本，以支援不同電腦間的一致開發流程。程式碼、Migration 與初始化資料定義透過 Git 同步；Docker Volume 只保存單一電腦的本機資料，不視為跨電腦資料同步機制。
 
 ### 4.1 LINE 身分與執行環境
 
@@ -262,6 +267,33 @@ LINE 身分流程
 
 `BattleRecord` 初版可只保留近期紀錄，或僅在開發環境完整保存；但戰鬥運算應回傳相同的結構化結果，避免顯示層解析文字。
 
+### 4.3 戰鬥核心邊界
+
+```text
+BattleState
+├─ player_side：BattleSide
+│  └─ units：1～N 個 CombatUnit
+│
+├─ enemy_side：BattleSide
+│  └─ units：1～N 個 CombatUnit
+│
+├─ CombatUnit
+│  ├─ unit_id：單場戰鬥內穩定且唯一的識別碼
+│  ├─ side／source：所屬陣營與 Player、Monster 或未來其他資料來源
+│  └─ 戰鬥快照：HP、MP、能力值與存活狀態
+│
+├─ 行動順序
+│  └─ 由存活單位與 AGI 統一產生，不依賴 Player 或 Monster Model 類型
+│
+├─ 目標選擇
+│  └─ 透過獨立策略從敵對 BattleSide 的存活單位選取
+│
+└─ 勝敗判定
+   └─ 任一 BattleSide 的必要單位全部失去戰鬥能力時結束
+```
+
+MVP 遭遇與持久化流程仍建立 1 名玩家對 1 隻怪物，不新增 Party、Summon 或 Formation Model。集合式 Domain 介面只用來解除戰鬥公式對單一 Player／Monster 的硬編碼，並提供決定性的 1 對 2 測試，不代表多人隊伍已納入 MVP。
+
 ## 5. 戰鬥請求與交易流程
 
 ```text
@@ -280,7 +312,8 @@ LINE 身分流程
 ├─ 4. 模擬完整戰鬥
 │  ├─ Round 1～N 依固定順序執行
 │  ├─ 每次行動寫入結構化 BattleEvent
-│  └─ 任一方 HP ≤ 0 時立即停止後續行動
+│  ├─ 單位 HP ≤ 0 後不得再行動
+│  └─ 任一 BattleSide 全滅時立即停止後續行動
 │
 ├─ 5. 判定結果
 │  ├─ 怪物死亡：計算獎勵與升級
@@ -608,12 +641,13 @@ Round N
 BattleResult
 ├─ battle_id / random_seed
 ├─ result：win / lose
-├─ end_reason：player_dead / monster_dead / round_limit
+├─ end_reason：player_dead / monster_dead / player_side_defeated / enemy_side_defeated / round_limit
 ├─ player_before / player_after
 ├─ monster_snapshot
 ├─ rounds
 │  └─ events
-│     ├─ actor / target
+│     ├─ actor_unit_id / target_unit_ids
+│     ├─ actor_name / target_name
 │     ├─ action_type / skill_id
 │     ├─ hit / critical
 │     ├─ damage / hp_before / hp_after
@@ -628,7 +662,6 @@ BattleResult
 文字模板範例：
 
 ```text
-── Round 3 ──
 你使出【強力斬擊】！
 暴擊！對哥布林造成 82 點傷害。
 哥布林被擊倒了！

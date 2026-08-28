@@ -161,6 +161,21 @@ LINE 安全要求
 └─ 未取得使用者同意，不以 cookie 或 Web Storage 串聯 LINE 身分與外部追蹤資料
 ```
 
+```text
+通用敏感資訊要求
+├─ 密碼、Secret Key、API Key、Token、私鑰與連線憑證不得進入 Repository
+│
+├─ 有效敏感值只能由環境變數、未追蹤的本機設定或部署平台 Secret 管理
+│
+├─ `.env.example` 只保存變數名稱與無法直接使用的提示值，不提供有效憑證
+│
+├─ Docker Compose、測試資料、文件與程式碼不得提供可直接登入的固定密碼
+│
+├─ Log、錯誤訊息、URL、測試輸出與完成回報不得揭露敏感值
+│
+└─ 本機開發便利功能必須限制於 DEBUG，且不得降低 Production 的驗證要求
+```
+
 ---
 
 ## 6. Scope Control
@@ -190,6 +205,7 @@ LINE 安全要求
 ```text
 技術選擇
 ├─ 先使用專案既有 Stack
+├─ 標準執行環境與技術棧以 PROJECT_SPEC.md 的技術架構為準
 ├─ 先確認標準函式庫與現有 Dependency 能否完成需求
 ├─ 不為小型功能增加 Package
 ├─ 不為未知需求提前加入基礎設施

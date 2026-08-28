@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}背包 · CGI Adventure{% endblock %}
+{% block content %}
+<section class="hero"><div><p class="eyebrow">INVENTORY</p><h1>{{ player.name }} 的背包</h1></div><div class="resources"><span>Gold {{ player.gold }}</span></div></section>
+<section class="panel">
+  <h2>目前裝備</h2>
+  <p>武器：{{ player.equipment.weapon|default:"無" }}　防具：{{ player.equipment.armor|default:"無" }}　飾品：{{ player.equipment.accessory|default:"無" }}</p>
+</section>
+<section>
+  <h2>持有物品</h2>
+  <div class="card-grid">
+    {% for row in items %}
+      <article class="panel item-card"><h3>{{ row.item.name }} ×{{ row.quantity }}</h3><p>{{ row.item.get_item_type_display }} · {{ row.item.rarity }}</p><p>ATK +{{ row.item.atk_bonus }} · DEF +{{ row.item.defense_bonus }} · AGI +{{ row.item.agility_bonus }}</p>{% if row.item.item_type != 'material' %}<form method="post" action="{% url 'game:equip' row.id %}">{% csrf_token %}<button type="submit">裝備</button></form>{% endif %}</article>
+    {% empty %}<p>背包是空的。</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}
