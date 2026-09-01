@@ -1,10 +1,28 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}登入 · CGI Adventure{% endblock %}
 {% block content %}
-<section class="panel narrow">
-  <p class="eyebrow">DEVELOPMENT ACCESS</p>
+<section
+  class="panel narrow"
+  data-line-login
+  data-login-enabled="{{ line_login_enabled|yesno:'true,false' }}"
+  data-login-endpoint="{% url 'line_login' %}"
+  data-next="{{ next|default:'/' }}"
+>
+  <p class="eyebrow">LINE ACCESS</p>
   <h1>進入冒險</h1>
-  <p>目前使用開發環境帳號登入；正式環境將由經 LINE Platform 驗證的身分建立 Session。</p>
-  <form method="post" class="stack">{% csrf_token %}{{ form.as_p }}<button type="submit">登入</button></form>
+  <p data-line-login-status>正在連接 LINE，請稍候……</p>
+  <button type="button" data-line-login-retry hidden>重新嘗試</button>
+  <form data-line-csrf hidden>{% csrf_token %}</form>
+  {% if development_login_enabled %}
+  <form method="post" class="stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">開發環境登入</button>
+  </form>
+  {% endif %}
 </section>
+{{ line_liff_id|json_script:"line-liff-id" }}
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="{% static 'game/line_login.js' %}" defer></script>
 {% endblock %}

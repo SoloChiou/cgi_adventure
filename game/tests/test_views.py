@@ -1,9 +1,13 @@
+import json
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
-from game.models import Area, BattleRecord, GameAccount, Item, Job, Player, PlayerItem, Skill
+from game.line_identity import LineIdentityError, VerifiedLineIdentity
+from game.models import Area, BattleRecord, ExternalIdentity, GameAccount, Item, Job, Player, PlayerItem, Skill
 
 
 class GameViewTests(TestCase):
@@ -60,6 +64,74 @@ class DevelopmentLoginTests(TestCase):
     def test_production_login_does_not_prefill_credentials(self):
         response = self.client.get(reverse("login"))
         self.assertNotContains(response, 'value="Test-only@not-a-credential"')
+        self.assertNotContains(response, 'type="password"')
+        response = self.client.post(reverse("login"), {"username": "test-admin", "password": "anything"})
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(DEBUG=False, LINE_LIFF_ID="123-test", LINE_CHANNEL_ID="123")
+    def test_production_login_initializes_liff(self):
+        response = self.client.get(reverse("login"))
+        self.assertContains(response, "static.line-scdn.net/liff/edge/2/sdk.js")
+        self.assertContains(response, 'data-login-enabled="true"')
+        self.assertContains(response, "123-test")
+
+
+@override_settings(LINE_CHANNEL_ID="123")
+class LineLoginTests(TestCase):
+    @patch("game.views.verify_line_id_token")
+    def test_verified_identity_creates_session_and_reuses_account(self, verify):
+        verify.return_value = VerifiedLineIdentity(user_id="U123", channel_id="123")
+
+        first = self.client.post(
+            reverse("line_login"),
+            data=json.dumps({"id_token": "first-token", "next": "/"}),
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["redirect_url"], "/")
+        first_user_id = int(self.client.session["_auth_user_id"])
+        self.client.logout()
+
+        second = self.client.post(
+            reverse("line_login"),
+            data=json.dumps({"id_token": "second-token", "next": "/"}),
+            content_type="application/json",
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(int(self.client.session["_auth_user_id"]), first_user_id)
+        self.assertEqual(ExternalIdentity.objects.count(), 1)
+        self.assertEqual(GameAccount.objects.count(), 1)
+        self.assertIsNotNone(GameAccount.objects.get().last_login_at)
+        self.assertFalse(get_user_model().objects.get(pk=first_user_id).has_usable_password())
+
+    @patch("game.views.verify_line_id_token", side_effect=LineIdentityError("LINE 身分驗證失敗。"))
+    def test_invalid_token_does_not_create_session(self, verify):
+        response = self.client.post(
+            reverse("line_login"),
+            data=json.dumps({"id_token": "invalid-token"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertEqual(GameAccount.objects.count(), 0)
+
+    def test_non_object_payload_is_rejected(self):
+        response = self.client.post(
+            reverse("line_login"),
+            data=json.dumps(["token"]),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    @patch("game.views.verify_line_id_token")
+    def test_external_redirect_is_rejected(self, verify):
+        verify.return_value = VerifiedLineIdentity(user_id="U123", channel_id="123")
+        response = self.client.post(
+            reverse("line_login"),
+            data=json.dumps({"id_token": "token", "next": "https://evil.example/"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.json()["redirect_url"], "/")
 
 
 class JobProgressionViewTests(TestCase):

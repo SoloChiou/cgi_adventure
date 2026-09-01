@@ -87,3 +87,5 @@ LOGIN_REDIRECT_URL = "game:home"
 LOGOUT_REDIRECT_URL = "login"
 DEV_ADMIN_USERNAME = os.environ.get("DEV_ADMIN_USERNAME", "")
 DEV_ADMIN_PASSWORD = os.environ.get("DEV_ADMIN_PASSWORD", "")
+LINE_LIFF_ID = os.environ.get("LINE_LIFF_ID", "")
+LINE_CHANNEL_ID = os.environ.get("LINE_CHANNEL_ID", "")

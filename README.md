@@ -29,6 +29,21 @@
 正式環境不得使用本機帳號入口取代 LINE 身分驗證。
 
 ```text
+LINE MINI App 登入設定
+├─ 1. 設定環境變數
+│  ├─ LINE_LIFF_ID：Developing、Review 或 Published 環境對應的 LIFF ID
+│  └─ LINE_CHANNEL_ID：同一個 LINE MINI App 內部 Channel 的 Channel ID
+│
+├─ 2. 開啟 MINI App
+│  └─ https://miniapp.line.me/{LINE_LIFF_ID}
+│
+└─ 3. 登入流程
+   ├─ LIFF 取得 ID token 並送至 POST /auth/line/
+   ├─ Django 向 LINE Platform 驗證 token 與 Channel
+   └─ 驗證成功後建立 Django Session 並進入遊戲
+```
+
+```text
 Docker 環境驗證
 ├─ 1. Django 系統檢查
 │  └─ docker compose exec web python manage.py check

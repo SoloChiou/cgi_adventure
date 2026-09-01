@@ -1,14 +1,19 @@
+import json
+
 from django.conf import settings
+from django.contrib.auth import login
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import Http404, HttpResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .forms import DevelopmentAuthenticationForm, DevelopmentPlayerForm, PlayerCreateForm
+from .line_identity import LineIdentityError, get_or_create_line_user, verify_line_id_token
 from .models import Area, BattleRecord, EquipmentSet, GameAccount, Item, Job, Player, PlayerItem
 from .services import BattleCooldown, apply_job_transition, available_job_transitions, run_battle, set_development_player_state
 
@@ -42,6 +47,12 @@ JOB_SUCCESS_COPY = {
 class DevelopmentLoginView(LoginView):
     template_name = "registration/login.html"
     authentication_form = DevelopmentAuthenticationForm
+    redirect_authenticated_user = True
+
+    def post(self, request, *args, **kwargs):
+        if not settings.DEBUG:
+            raise Http404
+        return super().post(request, *args, **kwargs)
 
     def get_initial(self):
         initial = super().get_initial()
@@ -51,6 +62,43 @@ class DevelopmentLoginView(LoginView):
             if username and password:
                 initial.update({"username": username, "password": password})
         return initial
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["line_liff_id"] = settings.LINE_LIFF_ID
+        context["line_login_enabled"] = bool(settings.LINE_LIFF_ID and settings.LINE_CHANNEL_ID)
+        context["development_login_enabled"] = settings.DEBUG
+        return context
+
+
+@require_POST
+def line_login(request):
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "登入資料格式錯誤。"}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "登入資料格式錯誤。"}, status=400)
+
+    try:
+        identity = verify_line_id_token(
+            payload.get("id_token"),
+            settings.LINE_CHANNEL_ID,
+        )
+        user = get_or_create_line_user(identity)
+    except LineIdentityError as error:
+        return JsonResponse({"error": str(error)}, status=401)
+
+    login(request, user)
+    default_redirect_url = resolve_url(settings.LOGIN_REDIRECT_URL)
+    redirect_url = payload.get("next") or default_redirect_url
+    if not url_has_allowed_host_and_scheme(
+        redirect_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        redirect_url = default_redirect_url
+    return JsonResponse({"redirect_url": redirect_url})
 
 
 def _get_player(user):

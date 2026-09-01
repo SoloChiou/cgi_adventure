@@ -234,8 +234,8 @@ LINE App／External Browser
 LINE 身分流程
 ├─ 1. 前端載入並初始化 LIFF SDK
 ├─ 2. 取得 ID token 或 access token
-├─ 3. 將 token 傳給 Django
-├─ 4. Django 向 LINE Platform 驗證 token、Channel 與有效期限
+├─ 3. 將 ID token 傳至 `POST /auth/line/`
+├─ 4. Django 向 `POST https://api.line.me/oauth2/v2.1/verify` 驗證 token、Channel 與有效期限
 ├─ 5. 以驗證後的 LINE user ID 對應本地帳號
 └─ 6. 建立 Django Session，後續遊戲請求使用伺服器 Session
 ```
