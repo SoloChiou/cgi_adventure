@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -58,6 +58,10 @@ def _get_player(user):
         return Player.objects.select_related("job", "equipment__weapon", "equipment__armor", "equipment__accessory").get(account__user=user)
     except Player.DoesNotExist:
         return None
+
+
+def health(request):
+    return HttpResponse("ok")
 
 
 def _progression_redirect(player):

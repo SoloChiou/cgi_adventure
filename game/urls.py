@@ -5,6 +5,7 @@ from . import views
 
 app_name = "game"
 urlpatterns = [
+    path("health/", views.health, name="health"),
     path("", views.home, name="home"),
     path("players/new/", views.create_player, name="create_player"),
     path("jobs/progression/", views.job_progression, name="job_progression"),

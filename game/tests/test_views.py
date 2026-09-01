@@ -182,6 +182,13 @@ class BattleResultTemplateTests(SimpleTestCase):
         self.assertIn("MP -4，剩餘 6", html)
 
 
+class HealthViewTests(SimpleTestCase):
+    def test_health_endpoint_returns_ok(self):
+        response = self.client.get(reverse("game:health"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"ok")
+
+
 class AutomaticJobSkillViewTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="skill-view", password="password")
