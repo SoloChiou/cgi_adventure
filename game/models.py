@@ -3,6 +3,21 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
+class SourcedContent(models.Model):
+    class AdaptationType(models.TextChoices):
+        CANONICAL = "canonical", "原典"
+        ADAPTED = "adapted", "改編"
+        ORIGINAL = "original", "原創"
+
+    source_work = models.CharField(max_length=100, blank=True)
+    source_reference = models.CharField(max_length=255, blank=True)
+    adaptation_type = models.CharField(max_length=16, choices=AdaptationType.choices, default=AdaptationType.ORIGINAL)
+    lore_note = models.TextField(blank=True)
+
+    class Meta:
+        abstract = True
+
+
 class GameAccount(models.Model):
     class Status(models.TextChoices):
         ACTIVE = "active", "啟用"
@@ -25,7 +40,7 @@ class ExternalIdentity(models.Model):
         constraints = [models.UniqueConstraint(fields=["provider", "provider_user_id", "channel_context"], name="unique_external_identity")]
 
 
-class Job(models.Model):
+class Job(SourcedContent):
     name = models.CharField(max_length=50, unique=True)
     required_level = models.PositiveSmallIntegerField(default=1)
     enabled = models.BooleanField(default=True)
@@ -58,7 +73,7 @@ class Player(models.Model):
         return self.name
 
 
-class Area(models.Model):
+class Area(SourcedContent):
     name = models.CharField(max_length=80, unique=True)
     description = models.TextField(blank=True)
     required_level = models.PositiveSmallIntegerField(default=1)
@@ -69,7 +84,7 @@ class Area(models.Model):
         return self.name
 
 
-class Monster(models.Model):
+class Monster(SourcedContent):
     name = models.CharField(max_length=80, unique=True)
     level = models.PositiveSmallIntegerField(default=1)
     max_hp = models.PositiveIntegerField()
@@ -100,7 +115,7 @@ class AreaEncounter(models.Model):
         constraints = [models.UniqueConstraint(fields=["area", "monster"], name="unique_area_monster")]
 
 
-class Item(models.Model):
+class Item(SourcedContent):
     class Type(models.TextChoices):
         WEAPON = "weapon", "武器"
         ARMOR = "armor", "防具"

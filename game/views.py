@@ -61,7 +61,7 @@ def create_player(request):
             player.job = job
             player.save()
             equipment = EquipmentSet.objects.create(player=player)
-            starter_weapon = Item.objects.filter(name="練習木劍", item_type=Item.Type.WEAPON).first()
+            starter_weapon = Item.objects.filter(name="桃木劍", item_type=Item.Type.WEAPON).first()
             if starter_weapon:
                 PlayerItem.objects.create(player=player, item=starter_weapon, quantity=1)
                 equipment.weapon = starter_weapon
