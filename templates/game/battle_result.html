@@ -7,9 +7,9 @@
   {% for round in battle.rounds %}
     {% for event in round.events %}
       {% if not event.hit %}
-        <p class="battle-line">{{ event.actor_name }} 的攻擊沒有命中。</p>
+        <p class="battle-line">{{ event.actor_name }}{% if event.skill_name %}施放【{{ event.skill_name }}】{% else %}的攻擊{% endif %}沒有命中。{% if event.skill_name %}（MP -{{ event.mp_cost }}，剩餘 {{ event.mp_after }}）{% endif %}</p>
       {% else %}
-        <p class="battle-line">{{ event.actor_name }} 攻擊 {{ event.target_name }}，{% if event.critical %}<strong>暴擊！</strong>{% endif %}造成 {{ event.damage }} 點傷害。（HP {{ event.hp_before }} → {{ event.hp_after }}）</p>
+        <p class="battle-line">{{ event.actor_name }}{% if event.skill_name %}施放【{{ event.skill_name }}】攻擊{% else %}攻擊{% endif %} {{ event.target_name }}，{% if event.critical %}<strong>暴擊！</strong>{% endif %}造成 {{ event.damage }} 點傷害。（HP {{ event.hp_before }} → {{ event.hp_after }}{% if event.skill_name %}；MP -{{ event.mp_cost }}，剩餘 {{ event.mp_after }}{% endif %}）</p>
       {% endif %}
     {% endfor %}
   {% endfor %}

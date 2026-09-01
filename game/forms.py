@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
-from .models import Player
+from .models import Job, Player
 
 
 class DevelopmentAuthenticationForm(AuthenticationForm):
@@ -20,3 +20,13 @@ class PlayerCreateForm(forms.ModelForm):
 
     def clean_name(self):
         return self.cleaned_data["name"].strip()
+
+
+class DevelopmentPlayerForm(forms.Form):
+    level = forms.IntegerField(label="角色等級", min_value=1, max_value=99)
+    job = forms.ModelChoiceField(label="職業", queryset=Job.objects.none())
+    hp = forms.IntegerField(label="目前 HP", min_value=0)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["job"].queryset = Job.objects.filter(enabled=True).order_by("tier", "id")

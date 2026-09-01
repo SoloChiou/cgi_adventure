@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}選擇第一階職業｜CGI Adventure{% endblock %}
+{% block content %}
+<section>
+  <p class="eyebrow">FIRST JOB CHANGE</p>
+  <h1>選擇第一階職業</h1>
+  <p>{{ player.name }} 已達 Lv.{{ player.level }}，請選擇接下來的修行道路。</p>
+  <div class="card-grid">
+    {% for job in jobs %}
+      <article class="panel">
+        <h2>{{ job.name }}</h2>
+        <form method="post" action="{% url 'game:job_transition' %}">
+          {% csrf_token %}
+          <input type="hidden" name="job_id" value="{{ job.id }}">
+          <button type="submit">轉職為{{ job.name }}</button>
+        </form>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}轉職成功｜CGI Adventure{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <p class="eyebrow">JOB ADVANCEMENT COMPLETE</p>
+  <h1>轉職成功</h1>
+  <p>{{ player.name }} 已成為「{{ job.name }}」。</p>
+  <p>目前等級 Lv.{{ player.level }}，生命與魔力已完全恢復。</p>
+  <a class="button" href="{% url 'game:home' %}">繼續冒險</a>
+</section>
+{% endblock %}

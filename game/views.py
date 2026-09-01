@@ -8,9 +8,9 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from .forms import DevelopmentAuthenticationForm, PlayerCreateForm
+from .forms import DevelopmentAuthenticationForm, DevelopmentPlayerForm, PlayerCreateForm
 from .models import Area, EquipmentSet, GameAccount, Item, Job, Player, PlayerItem
-from .services import BattleCooldown, run_battle
+from .services import BattleCooldown, apply_job_transition, available_job_transitions, run_battle, set_development_player_state
 
 
 class DevelopmentLoginView(LoginView):
@@ -34,14 +34,36 @@ def _get_player(user):
         return None
 
 
+def _progression_redirect(player):
+    if available_job_transitions(player).exists():
+        return redirect("game:job_progression")
+    return None
+
+
 @login_required
 def home(request):
     player = _get_player(request.user)
     if not player:
         return redirect("game:create_player")
-    areas = Area.objects.filter(enabled=True, required_level__lte=player.level).order_by("required_level", "id")
+    progression_redirect = _progression_redirect(player)
+    if progression_redirect:
+        return progression_redirect
+    areas = Area.objects.filter(enabled=True, required_level__lte=player.level)
+    if not settings.DEBUG:
+        areas = areas.filter(is_level_simulation=False)
+    areas = areas.order_by("required_level", "id")
     recent_battles = player.battles.order_by("-created_at")[:5]
-    return render(request, "game/home.html", {"player": player, "areas": areas, "recent_battles": recent_battles})
+    return render(request, "game/home.html", {
+        "player": player,
+        "areas": areas,
+        "recent_battles": recent_battles,
+        "development_player_form": DevelopmentPlayerForm(initial={
+            "level": player.level,
+            "job": player.job,
+            "hp": player.hp,
+        }) if settings.DEBUG else None,
+        "job_skills": player.job.skills.filter(enabled=True).order_by("priority", "id"),
+    })
 
 
 @login_required
@@ -81,7 +103,68 @@ def battle(request, area_id):
     except (BattleCooldown, PermissionDenied, ValidationError) as exc:
         messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
         return redirect("game:home")
+    player = _get_player(request.user)
+    progression_redirect = _progression_redirect(player)
+    if progression_redirect:
+        return progression_redirect
     return render(request, "game/battle_result.html", {"battle": result})
+
+
+@login_required
+def job_progression(request):
+    player = _get_player(request.user)
+    if not player:
+        return redirect("game:create_player")
+    options = list(available_job_transitions(player))
+    if not options:
+        return redirect("game:home")
+    if player.job.tier == Job.Tier.STARTER:
+        return render(request, "game/job_choice.html", {"player": player, "jobs": options})
+    if len(options) != 1:
+        raise ValidationError("進階職業路線設定不完整。")
+    return render(request, "game/job_transition_pending.html", {"player": player, "job": options[0]})
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def job_transition(request):
+    player = Player.objects.select_for_update().select_related("job").get(account__user=request.user)
+    target_job = get_object_or_404(Job, pk=request.POST.get("job_id"), enabled=True)
+    try:
+        apply_job_transition(player, target_job)
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+        return redirect("game:job_progression")
+    return render(request, "game/job_transition_success.html", {"player": player, "job": target_job})
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def development_set_level(request):
+    if not settings.DEBUG:
+        raise Http404
+    player = Player.objects.select_for_update().select_related("job").get(account__user=request.user)
+    form = DevelopmentPlayerForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "開發角色資料格式不正確。")
+        return redirect("game:home")
+    try:
+        set_development_player_state(
+            player,
+            target_level=form.cleaned_data["level"],
+            target_job=form.cleaned_data["job"],
+            target_hp=form.cleaned_data["hp"],
+        )
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+        return redirect("game:home")
+    progression_redirect = _progression_redirect(player)
+    if progression_redirect:
+        return progression_redirect
+    messages.success(request, "已更新角色的等級、職業與 HP，並同步能力值。")
+    return redirect("game:home")
 
 
 @login_required

@@ -3,6 +3,7 @@ import secrets
 from dataclasses import asdict
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import F
@@ -12,6 +13,7 @@ from .domain import (
     ENEMY_SIDE,
     PLAYER_SIDE,
     BattleSide,
+    CombatSkill,
     CombatUnit,
     combat_unit_dict,
     exp_to_next_level,
@@ -22,6 +24,7 @@ from .models import (
     BattleRecord,
     DropEntry,
     EquipmentSet,
+    Job,
     Player,
     PlayerItem,
     WeaponProficiency,
@@ -30,6 +33,72 @@ from .models import (
 
 class BattleCooldown(ValidationError):
     pass
+
+
+LEVEL_STAT_GROWTH = {
+    "max_hp": 5,
+    "max_mp": 2,
+    "atk": 2,
+    "defense": 1,
+    "agility": 1,
+}
+
+
+def available_job_transitions(player):
+    if player.job.tier >= Job.Tier.THIRD:
+        return Job.objects.none()
+    return Job.objects.filter(
+        enabled=True,
+        prerequisite_job=player.job,
+        tier=player.job.tier + 1,
+        required_level__lte=player.level,
+    ).order_by("id")
+
+
+def apply_job_transition(player, target_job):
+    if target_job.prerequisite_job_id != player.job_id:
+        raise ValidationError("不能跳階或轉入其他職業路線。")
+    if target_job.tier != player.job.tier + 1 or player.level < target_job.required_level:
+        raise ValidationError("目前尚未符合轉職條件。")
+    _replace_job_bonus(player, target_job)
+    player.job_count += 1
+    player.hp = player.max_hp
+    player.mp = player.max_mp
+    player.save()
+    return player
+
+
+def _replace_job_bonus(player, target_job):
+    old_job = player.job
+    for player_field, job_field in (
+        ("max_hp", "max_hp_bonus"),
+        ("max_mp", "max_mp_bonus"),
+        ("atk", "atk_bonus"),
+        ("defense", "defense_bonus"),
+        ("intelligence", "intelligence_bonus"),
+        ("magic_defense", "magic_defense_bonus"),
+        ("agility", "agility_bonus"),
+        ("critical", "critical_bonus"),
+    ):
+        value = getattr(player, player_field) - getattr(old_job, job_field) + getattr(target_job, job_field)
+        setattr(player, player_field, value)
+    player.job = target_job
+
+
+def set_development_player_state(player, *, target_level, target_job, target_hp):
+    level_delta = target_level - player.level
+    for field, growth in LEVEL_STAT_GROWTH.items():
+        setattr(player, field, max(1, getattr(player, field) + level_delta * growth))
+    player.level = target_level
+    if target_job.pk != player.job_id:
+        _replace_job_bonus(player, target_job)
+    if target_hp > player.max_hp:
+        raise ValidationError("目前 HP 不得超過調整後的 MaxHP。")
+    player.hp = target_hp
+    player.mp = min(player.mp, player.max_mp)
+    player.job_count = target_job.tier
+    player.save()
+    return player
 
 
 def _equipment_bonuses(player):
@@ -68,6 +137,20 @@ def _validate_equipment(player):
 
 def player_combat_unit(player):
     bonuses = _equipment_bonuses(player)
+    job_skills = player.job.skills.filter(enabled=True).order_by("priority", "id")
+    skills = [
+        CombatSkill(
+            skill_id=skill.id,
+            name=skill.name,
+            mp_cost=skill.mp_cost,
+            damage_type=skill.damage_type,
+            power_multiplier=float(skill.power_multiplier),
+            trigger_rate=float(skill.trigger_rate),
+            accuracy_modifier=float(skill.accuracy_modifier),
+            condition=skill.condition,
+        )
+        for skill in job_skills
+    ]
     return CombatUnit(
         unit_id="player:{}".format(player.pk), side=PLAYER_SIDE, source="player",
         name=player.name, hp=player.hp, mp=player.mp,
@@ -75,17 +158,29 @@ def player_combat_unit(player):
         atk=player.atk + bonuses["atk"], defense=player.defense + bonuses["defense"],
         intelligence=player.intelligence, magic_defense=player.magic_defense,
         agility=player.agility + bonuses["agility"], critical=float(player.critical),
+        level=player.level, skills=skills,
     )
 
 
 def monster_combat_unit(monster, instance_number=1):
+    return scaled_monster_combat_unit(monster, monster.level, instance_number)
+
+
+def scaled_monster_combat_unit(monster, target_level, instance_number=1):
+    level_delta = max(0, target_level - monster.level)
+    max_hp = monster.max_hp + level_delta * 8
+    max_mp = monster.max_mp + level_delta * 3
     return CombatUnit(
         unit_id="monster:{}:{}".format(monster.pk, instance_number), side=ENEMY_SIDE, source="monster",
-        name=monster.name, hp=monster.max_hp, mp=monster.max_mp,
-        max_hp=monster.max_hp, max_mp=monster.max_mp, atk=monster.atk,
-        defense=monster.defense, intelligence=monster.intelligence,
-        magic_defense=monster.magic_defense, agility=monster.agility,
+        name=monster.name, hp=max_hp, mp=max_mp,
+        max_hp=max_hp, max_mp=max_mp,
+        atk=monster.atk + level_delta * 2,
+        defense=monster.defense + level_delta,
+        intelligence=monster.intelligence + level_delta * 2,
+        magic_defense=monster.magic_defense + level_delta,
+        agility=monster.agility + level_delta,
         critical=float(monster.critical),
+        level=target_level,
     )
 
 
@@ -100,11 +195,8 @@ def _apply_level_ups(player):
     levels = []
     while player.level < 99 and player.exp >= exp_to_next_level(player.level):
         player.level += 1
-        player.max_hp += 5
-        player.max_mp += 2
-        player.atk += 2
-        player.defense += 1
-        player.agility += 1
+        for field, growth in LEVEL_STAT_GROWTH.items():
+            setattr(player, field, getattr(player, field) + growth)
         levels.append(player.level)
     if levels:
         player.hp = player.max_hp
@@ -155,6 +247,8 @@ def run_battle(*, user, area_id, seed=None, now=None):
         raise ValidationError("角色目前無法戰鬥。")
     _validate_equipment(player)
     area = Area.objects.prefetch_related("encounters__monster").get(pk=area_id, enabled=True)
+    if area.is_level_simulation and not settings.DEBUG:
+        raise PermissionDenied("此區域只在本機開發環境開放。")
     if player.level < area.required_level:
         raise PermissionDenied("角色等級不足，無法進入此地區。")
     if player.last_battle_at and now < player.last_battle_at + timedelta(seconds=area.cooldown_seconds):
@@ -165,9 +259,10 @@ def run_battle(*, user, area_id, seed=None, now=None):
     rng = random.Random(random_seed)
     monster = choose_monster(area, rng)
     player_before = player_combat_unit(player)
-    monster_snapshot = monster_combat_unit(monster)
+    monster_level = player.level if area.is_level_simulation else monster.level
+    monster_snapshot = scaled_monster_combat_unit(monster, monster_level)
     player_unit = player_combat_unit(player)
-    monster_unit = monster_combat_unit(monster)
+    monster_unit = scaled_monster_combat_unit(monster, monster_level)
     outcome = simulate_battle(
         BattleSide(PLAYER_SIDE, [player_unit]),
         BattleSide(ENEMY_SIDE, [monster_unit]),
@@ -175,10 +270,14 @@ def run_battle(*, user, area_id, seed=None, now=None):
     )
     player_state = outcome.unit_states[player_unit.unit_id]
     player.last_battle_at = now
-    if outcome.result == "win":
+    if outcome.result == "win" and not area.is_level_simulation:
         player.hp = player_state["hp"]
         player.mp = player_state["mp"]
         rewards = _apply_rewards(player, monster, rng)
+    elif outcome.result == "win":
+        player.hp = player_state["hp"]
+        player.mp = player_state["mp"]
+        rewards = {"exp": 0, "gold": 0, "drops": [], "proficiency": None, "level_ups": []}
     else:
         player.hp = max(1, player.max_hp // 4)
         player.mp = player_state["mp"]

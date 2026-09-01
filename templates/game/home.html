@@ -1,13 +1,49 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="hero">
-  <div>
-    <p class="eyebrow">ADVENTURER STATUS</p>
-    <h1>{{ player.name }}</h1>
-    <p>{{ player.job.name }} · Lv.{{ player.level }} · 轉職 {{ player.job_count }} 次</p>
-  </div>
-  <div class="resources"><span>HP {{ player.hp }}/{{ player.max_hp }}</span><span>MP {{ player.mp }}/{{ player.max_mp }}</span><span>EXP {{ player.exp }}</span><span>{{ player.gold }} Gold</span></div>
+  {% if development_player_form %}
+    <form method="post" action="{% url 'game:development_set_level' %}" class="development-status-form">
+      {% csrf_token %}
+      <div>
+        <p class="eyebrow">ADVENTURER STATUS</p>
+        <h1>{{ player.name }}</h1>
+        <p class="development-job-line">
+          {{ development_player_form.job }}
+          <span aria-hidden="true">·</span>
+          <label>Lv.{{ development_player_form.level }}</label>
+          <span aria-hidden="true">·</span>
+          <span>轉職 {{ player.job_count }} 次</span>
+        </p>
+      </div>
+      <div class="resources">
+        <label class="development-resource">HP {{ development_player_form.hp }}/{{ player.max_hp }}</label>
+        <span>MP {{ player.mp }}/{{ player.max_mp }}</span>
+        <span>EXP {{ player.exp }}</span>
+        <span>{{ player.gold }} Gold</span>
+        <button type="submit" class="development-apply">套用</button>
+      </div>
+    </form>
+  {% else %}
+    <div>
+      <p class="eyebrow">ADVENTURER STATUS</p>
+      <h1>{{ player.name }}</h1>
+      <p>{{ player.job.name }} · Lv.{{ player.level }} · 轉職 {{ player.job_count }} 次</p>
+    </div>
+    <div class="resources"><span>HP {{ player.hp }}/{{ player.max_hp }}</span><span>MP {{ player.mp }}/{{ player.max_mp }}</span><span>EXP {{ player.exp }}</span><span>{{ player.gold }} Gold</span></div>
+  {% endif %}
 </section>
+
+{% if job_skills %}
+<section>
+  <h2>自動技能</h2>
+  <div class="panel stack">
+    <p class="muted">目前職階自動賦予以下技能，並依固定順序判定；未觸發時使用普通攻擊。</p>
+    {% for skill in job_skills %}
+      <p><strong>{{ forloop.counter }}. {{ skill.name }}</strong> · MP {{ skill.mp_cost }} · {{ skill.get_condition_display }}</p>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section>
   <h2>選擇地區</h2>

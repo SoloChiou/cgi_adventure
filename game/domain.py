@@ -1,5 +1,5 @@
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 
@@ -25,6 +25,18 @@ def exp_to_next_level(level):
 
 
 @dataclass
+class CombatSkill:
+    skill_id: int
+    name: str
+    mp_cost: int
+    damage_type: str
+    power_multiplier: float
+    trigger_rate: float
+    accuracy_modifier: float
+    condition: str
+
+
+@dataclass
 class CombatUnit:
     unit_id: str
     side: str
@@ -40,6 +52,8 @@ class CombatUnit:
     magic_defense: int
     agility: int
     critical: float
+    level: int = 1
+    skills: List[CombatSkill] = field(default_factory=list)
 
     @property
     def alive(self):
@@ -112,8 +126,32 @@ def select_target(state, attacker):
     return targets[0] if targets else None
 
 
+def _condition_met(skill, attacker, target):
+    if skill.condition == "self_hp_lte_30":
+        return attacker.hp / attacker.max_hp <= 0.30
+    if skill.condition == "target_hp_gte_50":
+        return target.hp / target.max_hp >= 0.50
+    return True
+
+
+def _select_skill(attacker, target, rng):
+    rolls = []
+    for skill in attacker.skills:
+        if attacker.mp < skill.mp_cost or not _condition_met(skill, attacker, target):
+            continue
+        roll = rng.random()
+        rolls.append({"skill_id": skill.skill_id, "roll": roll})
+        if roll < skill.trigger_rate:
+            return skill, rolls
+    return None, rolls
+
+
 def _attack(attacker: CombatUnit, target: CombatUnit, rng, round_number: int):
-    chance_to_hit = hit_rate(attacker.agility, target.agility)
+    skill, skill_rolls = _select_skill(attacker, target, rng)
+    if skill:
+        attacker.mp -= skill.mp_cost
+    accuracy_modifier = skill.accuracy_modifier if skill else 0.0
+    chance_to_hit = hit_rate(attacker.agility, target.agility, accuracy_modifier)
     hit_roll = rng.random()
     event = {
         "round": round_number,
@@ -123,14 +161,17 @@ def _attack(attacker: CombatUnit, target: CombatUnit, rng, round_number: int):
         "target": target.unit_id,
         "target_unit_ids": [target.unit_id],
         "target_name": target.name,
-        "action_type": "attack",
-        "skill_id": None,
+        "action_type": "skill" if skill else "attack",
+        "skill_id": skill.skill_id if skill else None,
+        "skill_name": skill.name if skill else None,
+        "mp_cost": skill.mp_cost if skill else 0,
+        "mp_after": attacker.mp,
         "hit": hit_roll < chance_to_hit,
         "critical": False,
         "damage": 0,
         "hp_before": target.hp,
         "hp_after": target.hp,
-        "random_rolls": {"hit": hit_roll},
+        "random_rolls": {"skill_triggers": skill_rolls, "hit": hit_roll},
     }
     if not event["hit"]:
         return event
@@ -139,14 +180,18 @@ def _attack(attacker: CombatUnit, target: CombatUnit, rng, round_number: int):
     crit_chance = critical_rate(attacker.critical, attacker.agility, target.agility)
     crit_roll = rng.random()
     critical = crit_roll < crit_chance
-    base_damage = max(1, attacker.atk - target.defense)
-    damage = max(1, math.floor(base_damage * variance * (1.5 if critical else 1)))
+    if skill and skill.damage_type == "magical":
+        base_damage = max(1, attacker.intelligence - target.magic_defense)
+    else:
+        base_damage = max(1, attacker.atk - target.defense)
+    skill_damage = max(1, base_damage * (skill.power_multiplier if skill else 1.0))
+    damage = max(1, math.floor(skill_damage * variance * (1.5 if critical else 1)))
     target.hp = max(0, target.hp - damage)
     event.update({
         "critical": critical,
         "damage": damage,
         "hp_after": target.hp,
-        "random_rolls": {"hit": hit_roll, "variance": variance, "critical": crit_roll},
+        "random_rolls": {"skill_triggers": skill_rolls, "hit": hit_roll, "variance": variance, "critical": crit_roll},
     })
     return event
 

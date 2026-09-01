@@ -12,9 +12,10 @@ from .models import (
     Job,
     Monster,
     Player,
+    Skill,
     PlayerItem,
     WeaponProficiency,
 )
 
 
-admin.site.register([GameAccount, ExternalIdentity, Player, Job, Area, AreaEncounter, Monster, Item, PlayerItem, EquipmentSet, DropEntry, WeaponProficiency, BattleRecord])
+admin.site.register([GameAccount, ExternalIdentity, Player, Job, Skill, Area, AreaEncounter, Monster, Item, PlayerItem, EquipmentSet, DropEntry, WeaponProficiency, BattleRecord])

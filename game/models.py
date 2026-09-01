@@ -41,12 +41,64 @@ class ExternalIdentity(models.Model):
 
 
 class Job(SourcedContent):
+    class Tier(models.IntegerChoices):
+        STARTER = 0, "初始"
+        FIRST = 1, "第一階"
+        SECOND = 2, "第二階"
+        THIRD = 3, "第三階"
+
     name = models.CharField(max_length=50, unique=True)
     required_level = models.PositiveSmallIntegerField(default=1)
+    tier = models.PositiveSmallIntegerField(choices=Tier.choices, default=Tier.STARTER)
+    prerequisite_job = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True, related_name="next_jobs")
+    max_hp_bonus = models.IntegerField(default=0)
+    max_mp_bonus = models.IntegerField(default=0)
+    atk_bonus = models.IntegerField(default=0)
+    defense_bonus = models.IntegerField(default=0)
+    intelligence_bonus = models.IntegerField(default=0)
+    magic_defense_bonus = models.IntegerField(default=0)
+    agility_bonus = models.IntegerField(default=0)
+    critical_bonus = models.DecimalField(max_digits=4, decimal_places=3, default=0)
     enabled = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
+
+
+class Skill(SourcedContent):
+    class DamageType(models.TextChoices):
+        PHYSICAL = "physical", "物理"
+        MAGICAL = "magical", "魔法"
+
+    class Condition(models.TextChoices):
+        ALWAYS = "always", "無額外條件"
+        SELF_HP_LOW = "self_hp_lte_30", "自身 HP ≤ 30%"
+        TARGET_HP_HIGH = "target_hp_gte_50", "目標 HP ≥ 50%"
+
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="skills")
+    name = models.CharField(max_length=80, unique=True)
+    priority = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])
+    mp_cost = models.PositiveSmallIntegerField()
+    damage_type = models.CharField(max_length=12, choices=DamageType.choices)
+    power_multiplier = models.DecimalField(max_digits=4, decimal_places=2)
+    trigger_rate = models.DecimalField(
+        max_digits=4,
+        decimal_places=3,
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
+    accuracy_modifier = models.DecimalField(max_digits=4, decimal_places=3, default=0)
+    condition = models.CharField(max_length=24, choices=Condition.choices, default=Condition.ALWAYS)
+    enabled = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ["priority", "id"]
+        constraints = [
+            models.CheckConstraint(check=models.Q(trigger_rate__gte=0, trigger_rate__lte=1), name="skill_trigger_rate_valid"),
+            models.UniqueConstraint(fields=["job", "priority"], name="unique_job_skill_priority"),
+        ]
 
 
 class Player(models.Model):
@@ -78,6 +130,7 @@ class Area(SourcedContent):
     description = models.TextField(blank=True)
     required_level = models.PositiveSmallIntegerField(default=1)
     cooldown_seconds = models.PositiveSmallIntegerField(default=3)
+    is_level_simulation = models.BooleanField(default=False)
     enabled = models.BooleanField(default=True)
 
     def __str__(self):
