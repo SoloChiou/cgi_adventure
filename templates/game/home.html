@@ -64,7 +64,7 @@
   <h2>近期戰績</h2>
   <div class="panel">
     {% for battle in recent_battles %}
-      <p><strong>{% if battle.result == 'win' %}勝利{% else %}敗北{% endif %}</strong> · {{ battle.monster_snapshot.name }} · {{ battle.created_at|date:"m/d H:i:s" }}</p>
+      <p><a href="{% url 'game:battle_history' battle.pk %}"><strong>{% if battle.result == 'win' %}勝利{% else %}敗北{% endif %}</strong> · {{ battle.monster_snapshot.name }} · {{ battle.created_at|date:"m/d H:i:s" }}</a></p>
     {% empty %}<p class="muted">尚無戰鬥紀錄。</p>{% endfor %}
   </div>
 </section>

@@ -1,16 +1,15 @@
 {% extends "base.html" %}
-{% load static %}
 {% block title %}進行轉職｜CGI Adventure{% endblock %}
 {% block content %}
 <section class="panel narrow">
   <p class="eyebrow">JOB ADVANCEMENT</p>
   <h1>修行突破</h1>
-  <p>{{ player.name }} 已符合條件，即將轉職為「{{ job.name }}」。</p>
-  <form method="post" action="{% url 'game:job_transition' %}" data-auto-submit>
+  <p>{{ player.name }} 已符合條件。</p>
+  <p>{{ guide }}</p>
+  <form method="post" action="{% url 'game:job_transition' %}">
     {% csrf_token %}
     <input type="hidden" name="job_id" value="{{ job.id }}">
-    <button type="submit">完成轉職</button>
+    <button type="submit">{{ job.transition_copy }}</button>
   </form>
 </section>
-<script src="{% static 'game/auto_submit.js' %}" defer></script>
 {% endblock %}

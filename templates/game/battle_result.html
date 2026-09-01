@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}戰鬥結果 · CGI Adventure{% endblock %}
 {% block content %}
-<section class="battle-log panel {{ battle.result }}" data-battle-replay data-line-delay="550" aria-live="polite">
+<section class="battle-log panel {{ battle.result }}" {% if not is_history %}data-battle-replay data-line-delay="550"{% endif %} aria-live="polite">
   <p class="battle-line battle-opening">{{ battle.player_before.name }}遭遇了{{ battle.monster_snapshot.name }}！</p>
   {% for round in battle.rounds %}
     {% for event in round.events %}
@@ -24,5 +24,6 @@
   <p class="battle-line muted">Battle #{{ battle.battle_id }} · Seed {{ battle.random_seed }}</p>
 </section>
 <a class="button" href="{% url 'game:home' %}">返回城鎮</a>
+{% if is_history %}<p class="muted">這是已保存的歷史戰鬥紀錄。</p>{% endif %}
 <script src="{% static 'game/battle_replay.js' %}" defer></script>
 {% endblock %}

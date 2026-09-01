@@ -41,6 +41,7 @@ input { width: 100%; border: 1px solid var(--line); background: #070b08; color: 
 .battle-log.lose .battle-outcome { color: #ef7777; text-shadow: 2px 2px #3a1111; }
 .battle-line.is-revealed { animation: battle-line-in .3s ease-out; }
 .level-up { color: var(--gold); font-weight: bold; }.muted { color: var(--muted); }.inline-form { display: inline; }
+.job-name-highlight { color: var(--gold); font-weight: 800; }
 @keyframes battle-line-in { from { opacity: 0; transform: translateY(.35rem); } to { opacity: 1; transform: translateY(0); } }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); } table { width: 100%; border-collapse: collapse; background: var(--panel); } th, td { padding: .8rem; text-align: left; border-bottom: 1px solid var(--line); } th { color: var(--gold); }
 @media (max-width: 620px) { .site-header, .hero, .development-status-form { align-items: flex-start; flex-direction: column; } .resources { justify-content: start; } main { margin-top: 1rem; } nav { font-size: .9rem; } }

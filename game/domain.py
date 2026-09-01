@@ -54,6 +54,7 @@ class CombatUnit:
     critical: float
     level: int = 1
     skills: List[CombatSkill] = field(default_factory=list)
+    attack_type: str = "physical"
 
     @property
     def alive(self):
@@ -180,7 +181,7 @@ def _attack(attacker: CombatUnit, target: CombatUnit, rng, round_number: int):
     crit_chance = critical_rate(attacker.critical, attacker.agility, target.agility)
     crit_roll = rng.random()
     critical = crit_roll < crit_chance
-    if skill and skill.damage_type == "magical":
+    if (skill and skill.damage_type == "magical") or (skill is None and attacker.attack_type == "magical"):
         base_damage = max(1, attacker.intelligence - target.magic_defense)
     else:
         base_damage = max(1, attacker.atk - target.defense)

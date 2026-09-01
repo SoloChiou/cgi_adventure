@@ -166,6 +166,14 @@ class BattleTests(SimpleTestCase):
         )
         self.assertGreater(result.rounds[0]["events"][0]["damage"], 1)
 
+    def test_magical_job_uses_intelligence_for_normal_attack(self):
+        result = battle(
+            [fighter("player:1", atk=100, intelligence=20, skills=[], attack_type="magical")],
+            [fighter("monster:1", ENEMY_SIDE, hp=100, max_hp=100, defense=999, magic_defense=2)],
+            4,
+        )
+        self.assertGreater(result.rounds[0]["events"][0]["damage"], 1)
+
     def test_priority_skips_unmet_condition(self):
         skills = [
             self.skill(skill_id=1, name="背水", condition="self_hp_lte_30"),

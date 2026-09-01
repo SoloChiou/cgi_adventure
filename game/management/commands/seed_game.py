@@ -45,6 +45,7 @@ class Command(BaseCommand):
             job, _ = Job.objects.update_or_create(
                 name=name,
                 defaults={
+                    "archetype": Job.Archetype.MAGICAL if name in {"御靈師", "通幽使", "萬靈宗師", "方士", "五行術士", "乾坤天師"} else Job.Archetype.PHYSICAL,
                     "required_level": required_level,
                     "tier": tier,
                     "prerequisite_job": jobs[prerequisite_name],

@@ -3,7 +3,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
-from game.models import Area, GameAccount, Item, Job, Player, PlayerItem, Skill
+from game.models import Area, BattleRecord, GameAccount, Item, Job, Player, PlayerItem, Skill
 
 
 class GameViewTests(TestCase):
@@ -80,21 +80,27 @@ class JobProgressionViewTests(TestCase):
         self.assertRedirects(response, reverse("game:job_progression"))
         response = self.client.get(reverse("game:job_progression"))
         for job in self.first_jobs:
-            self.assertContains(response, job.name)
+            self.assertNotContains(response, "<h2>{}</h2>".format(job.name), html=False)
+        self.assertContains(response, "你感覺身體充滿了能量")
+        self.assertContains(response, "鋼鐵般的意志")
 
     def test_first_job_choice_transitions_and_shows_success(self):
         response = self.client.post(reverse("game:job_transition"), {"job_id": self.first_jobs[0].pk})
         self.assertContains(response, "轉職成功")
+        self.assertContains(response, "力量終於找到工作了")
+        self.assertContains(response, 'class="job-name-highlight"')
         self.player.refresh_from_db()
         self.assertEqual(self.player.job, self.first_jobs[0])
 
-    def test_second_job_uses_automatic_transition_page(self):
+    def test_second_job_uses_manual_transition_prompt(self):
         self.player.job = self.first_jobs[0]
         self.player.level = 25
         self.player.save(update_fields=["job", "level"])
         response = self.client.get(reverse("game:job_progression"))
-        self.assertContains(response, "護法金剛")
-        self.assertContains(response, "data-auto-submit")
+        self.assertContains(response, "走過初入江湖的階段")
+        self.assertContains(response, "需要蓋章的正義")
+        self.assertNotContains(response, "data-auto-submit")
+        self.assertEqual(response.content.decode().count("需要蓋章的正義"), 1)
 
     def test_cannot_submit_job_from_another_route(self):
         self.player.job = self.first_jobs[0]
@@ -198,3 +204,38 @@ class AutomaticJobSkillViewTests(TestCase):
         response = self.client.get(reverse("game:home"))
         self.assertNotContains(response, "儲存技能配置")
         self.assertNotContains(response, "skills/configure")
+
+
+class BattleHistoryViewTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="history-view", password="password")
+        account = GameAccount.objects.create(user=self.user)
+        job = Job.objects.create(name="歷史測試職業")
+        self.player = Player.objects.create(account=account, name="歷史玩家", job=job)
+        self.record = BattleRecord.objects.create(
+            player=self.player,
+            monster_snapshot={"name": "歷史妖物"},
+            result="win",
+            end_reason="monster_dead",
+            rounds=[{"round": 1, "events": []}],
+            rewards={"exp": 3, "gold": 2, "drops": [], "proficiency": None, "level_ups": []},
+            random_seed=42,
+        )
+        self.client.force_login(self.user)
+
+    def test_recent_battle_links_to_history(self):
+        response = self.client.get(reverse("game:home"))
+        self.assertContains(response, reverse("game:battle_history", args=[self.record.pk]))
+
+    def test_history_page_renders_saved_battle(self):
+        response = self.client.get(reverse("game:battle_history", args=[self.record.pk]))
+        self.assertContains(response, "歷史妖物")
+        self.assertContains(response, "Battle #{}".format(self.record.pk))
+
+    def test_history_page_cannot_view_another_player_record(self):
+        other_user = get_user_model().objects.create_user(username="other-history", password="password")
+        other_account = GameAccount.objects.create(user=other_user)
+        Player.objects.create(account=other_account, name="其他玩家", job=self.player.job)
+        self.client.force_login(other_user)
+        response = self.client.get(reverse("game:battle_history", args=[self.record.pk]))
+        self.assertEqual(response.status_code, 404)

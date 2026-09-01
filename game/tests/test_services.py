@@ -153,6 +153,32 @@ class JobProgressionServiceTests(TestCase):
         self.assertEqual(self.player.atk, 19)
         self.assertEqual(self.player.job_count, 2)
 
+    def test_transition_to_magical_job_converts_level_atk_growth_to_intelligence(self):
+        magical = Job.objects.create(
+            name="方士", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter,
+            intelligence_bonus=10, archetype=Job.Archetype.MAGICAL,
+        )
+        self.player.level = 5
+        self.player.atk = 16  # base 8 + four levels of ATK growth
+        self.player.save(update_fields=["level", "atk"])
+        apply_job_transition(self.player, magical)
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.atk, 8)
+        self.assertEqual(self.player.intelligence, 21)
+
+    def test_magical_job_gains_intelligence_on_level_up(self):
+        magical = Job.objects.create(name="法術職", tier=Job.Tier.FIRST, archetype=Job.Archetype.MAGICAL, intelligence_bonus=10)
+        self.player.job = magical
+        self.player.level = 1
+        self.player.atk = 8
+        self.player.intelligence = 3
+        self.player.exp = 100
+        self.player.save(update_fields=["job", "level", "atk", "intelligence", "exp"])
+        from game.services import _apply_level_ups
+        _apply_level_ups(self.player)
+        self.assertEqual(self.player.intelligence, 5)
+        self.assertEqual(self.player.atk, 8)
+
     def test_transition_rejects_wrong_route(self):
         other = Job.objects.create(name="飛燕劍客", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter)
         apply_job_transition(self.player, self.first)

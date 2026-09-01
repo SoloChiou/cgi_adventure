@@ -42,6 +42,8 @@ LEVEL_STAT_GROWTH = {
     "defense": 1,
     "agility": 1,
 }
+BASE_ATK = 8
+BASE_INTELLIGENCE = 3
 
 
 def available_job_transitions(player):
@@ -70,6 +72,8 @@ def apply_job_transition(player, target_job):
 
 def _replace_job_bonus(player, target_job):
     old_job = player.job
+    if old_job.archetype != target_job.archetype:
+        _convert_level_attack_growth(player, old_job, target_job)
     for player_field, job_field in (
         ("max_hp", "max_hp_bonus"),
         ("max_mp", "max_mp_bonus"),
@@ -85,9 +89,26 @@ def _replace_job_bonus(player, target_job):
     player.job = target_job
 
 
+def _convert_level_attack_growth(player, old_job, target_job):
+    if old_job.archetype == target_job.archetype:
+        return
+    if old_job.archetype == Job.Archetype.PHYSICAL and target_job.archetype == Job.Archetype.MAGICAL:
+        growth = max(0, player.atk - BASE_ATK - old_job.atk_bonus)
+        player.atk -= growth
+        player.intelligence += growth
+    elif old_job.archetype == Job.Archetype.MAGICAL and target_job.archetype == Job.Archetype.PHYSICAL:
+        growth = max(0, player.intelligence - BASE_INTELLIGENCE - old_job.intelligence_bonus)
+        player.intelligence -= growth
+        player.atk += growth
+
+
 def set_development_player_state(player, *, target_level, target_job, target_hp):
     level_delta = target_level - player.level
-    for field, growth in LEVEL_STAT_GROWTH.items():
+    growth_fields = dict(LEVEL_STAT_GROWTH)
+    if target_job.archetype == Job.Archetype.MAGICAL:
+        growth_fields.pop("atk")
+        growth_fields["intelligence"] = 2
+    for field, growth in growth_fields.items():
         setattr(player, field, max(1, getattr(player, field) + level_delta * growth))
     player.level = target_level
     if target_job.pk != player.job_id:
@@ -158,7 +179,7 @@ def player_combat_unit(player):
         atk=player.atk + bonuses["atk"], defense=player.defense + bonuses["defense"],
         intelligence=player.intelligence, magic_defense=player.magic_defense,
         agility=player.agility + bonuses["agility"], critical=float(player.critical),
-        level=player.level, skills=skills,
+        level=player.level, skills=skills, attack_type=player.job.archetype,
     )
 
 
@@ -195,7 +216,12 @@ def _apply_level_ups(player):
     levels = []
     while player.level < 99 and player.exp >= exp_to_next_level(player.level):
         player.level += 1
-        for field, growth in LEVEL_STAT_GROWTH.items():
+        growth_fields = LEVEL_STAT_GROWTH
+        if player.job.archetype == Job.Archetype.MAGICAL:
+            growth_fields = {**LEVEL_STAT_GROWTH, "atk": 0, "intelligence": 2}
+        for field, growth in growth_fields.items():
+            if not growth:
+                continue
             setattr(player, field, getattr(player, field) + growth)
         levels.append(player.level)
     if levels:

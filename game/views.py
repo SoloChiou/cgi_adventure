@@ -9,8 +9,34 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .forms import DevelopmentAuthenticationForm, DevelopmentPlayerForm, PlayerCreateForm
-from .models import Area, EquipmentSet, GameAccount, Item, Job, Player, PlayerItem
+from .models import Area, BattleRecord, EquipmentSet, GameAccount, Item, Job, Player, PlayerItem
 from .services import BattleCooldown, apply_job_transition, available_job_transitions, run_battle, set_development_player_state
+
+
+JOB_TRANSITION_COPY = {
+    "金剛力士": "鋼鐵般的意志，以及一拳解決問題的決心",
+    "飛燕劍客": "追不到的車尾燈，以及比風還快的劍影",
+    "御靈師": "能和狐仙聊天、和紙人談工作的奇妙人脈",
+    "方士": "一張符解決不了的事，那就再貼一張",
+    "護法金剛": "你的拳頭已經不只是拳頭，而是一份需要蓋章的正義。下一步，你要把它升級成守護眾生的鐵腕，連蚊子都不敢靠近。",
+    "流雲劍俠": "你的腳步快得讓影子開始申請加班。現在，是時候讓劍法也學會飄逸，踏雲而行。",
+    "通幽使": "你和靈體相處得越來越融洽，甚至開始有人請你代收陰間包裹。下一步，你要成為出入幽冥如走後門的通幽使。",
+    "五行術士": "你已經能讓金木水火土輪流替你加班。既然大家都這麼熟了，不如正式升任五行輪轉，讓符法不打烊。",
+    "鎮獄神將": "你的威嚴已經重到連地府公文都不敢遲到。下一站，不是升官，是直接讓牢獄知道誰才是老闆，一戟鎮住地府十八層。",
+    "凌霄劍仙": "你的劍快到連月光都來不及反射。凡間已經放不下你的劍鞘，現在你要飛升成為一劍凌霄、御風而行的劍仙。",
+    "萬靈宗師": "從狐鬼精怪到路邊石頭，大家都想拜你為師。既然萬物都有求於你，那就正式接下這個稱號，一聲令下就能令萬靈排隊報到。",
+    "乾坤天師": "你已經不只是在施法，而是在替天地重新排版。當乾坤開始聽你的安排，你唯一缺少的只是名片，做好準備接掌天地吧!",
+}
+JOB_CHOICE_INTRO = "你感覺身體充滿了能量。這股力量若不找個出口，恐怕連隔壁攤的豆腐都要遭殃。你想把這股能量轉化成："
+JOB_TIER_GUIDE = {
+    Job.Tier.SECOND: "你已經走過初入江湖的階段。這身功力若再不找個正經名分，恐怕連敵人都不知道該怎麼稱呼你。現在，你可以踏入更高一階的修行。",
+    Job.Tier.THIRD: "你在凡間累積的功力已經多到快要超載。再往前一步，便不是升職，而是讓天地重新考慮規則。請做好準備，迎接最後一階的修行。",
+}
+JOB_SUCCESS_COPY = {
+    Job.Tier.FIRST: "你的力量終於找到工作了。從今天起，你不再只是遊方客。",
+    Job.Tier.SECOND: "你已經不是當年那個只會揮拳、揮劍、招靈或貼符的人了。新的職階，新的麻煩，也是一樣多的敵人。",
+    Job.Tier.THIRD: "恭喜。你的修行已經超出一般人的理解範圍。請記得低調，尤其是在打穿屋頂之後。",
+}
 
 
 class DevelopmentLoginView(LoginView):
@@ -111,6 +137,25 @@ def battle(request, area_id):
 
 
 @login_required
+def battle_history(request, battle_id):
+    player = _get_player(request.user)
+    if not player:
+        return redirect("game:create_player")
+    record = get_object_or_404(BattleRecord, pk=battle_id, player=player)
+    battle = {
+        "battle_id": record.pk,
+        "random_seed": record.random_seed,
+        "result": record.result,
+        "end_reason": record.end_reason,
+        "player_before": {"name": player.name},
+        "monster_snapshot": record.monster_snapshot,
+        "rounds": record.rounds,
+        "rewards": record.rewards,
+    }
+    return render(request, "game/battle_result.html", {"battle": battle, "is_history": True})
+
+
+@login_required
 def job_progression(request):
     player = _get_player(request.user)
     if not player:
@@ -119,10 +164,18 @@ def job_progression(request):
     if not options:
         return redirect("game:home")
     if player.job.tier == Job.Tier.STARTER:
-        return render(request, "game/job_choice.html", {"player": player, "jobs": options})
+        for job in options:
+            job.transition_copy = JOB_TRANSITION_COPY.get(job.name, "一條尚待命名的修行道路")
+        return render(request, "game/job_choice.html", {"player": player, "jobs": options, "intro": JOB_CHOICE_INTRO})
     if len(options) != 1:
         raise ValidationError("進階職業路線設定不完整。")
-    return render(request, "game/job_transition_pending.html", {"player": player, "job": options[0]})
+    job = options[0]
+    job.transition_copy = JOB_TRANSITION_COPY.get(job.name, "你的修行即將進入下一個階段。")
+    return render(request, "game/job_transition_pending.html", {
+        "player": player,
+        "job": job,
+        "guide": JOB_TIER_GUIDE.get(job.tier, "你的修行即將進入下一個階段。"),
+    })
 
 
 @login_required
@@ -136,7 +189,11 @@ def job_transition(request):
     except ValidationError as exc:
         messages.error(request, exc.messages[0])
         return redirect("game:job_progression")
-    return render(request, "game/job_transition_success.html", {"player": player, "job": target_job})
+    return render(request, "game/job_transition_success.html", {
+        "player": player,
+        "job": target_job,
+        "success_copy": JOB_SUCCESS_COPY.get(target_job.tier, "你的修行又向前了一步。"),
+    })
 
 
 @login_required

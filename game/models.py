@@ -41,6 +41,10 @@ class ExternalIdentity(models.Model):
 
 
 class Job(SourcedContent):
+    class Archetype(models.TextChoices):
+        PHYSICAL = "physical", "物理"
+        MAGICAL = "magical", "魔法"
+
     class Tier(models.IntegerChoices):
         STARTER = 0, "初始"
         FIRST = 1, "第一階"
@@ -48,6 +52,7 @@ class Job(SourcedContent):
         THIRD = 3, "第三階"
 
     name = models.CharField(max_length=50, unique=True)
+    archetype = models.CharField(max_length=12, choices=Archetype.choices, default=Archetype.PHYSICAL)
     required_level = models.PositiveSmallIntegerField(default=1)
     tier = models.PositiveSmallIntegerField(choices=Tier.choices, default=Tier.STARTER)
     prerequisite_job = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True, related_name="next_jobs")
