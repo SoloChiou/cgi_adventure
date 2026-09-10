@@ -4,6 +4,8 @@ db.sqlite3
 .env
 .venv/
 staticfiles/
-line_login_frontend/dist/
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
 coverage.xml
 .coverage

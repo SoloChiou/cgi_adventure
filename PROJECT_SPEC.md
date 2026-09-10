@@ -1,6 +1,6 @@
-# CGI Adventure 專案規格（初版）
+# CGI Adventure 專案規格（前後端分離版）
 
-> 文件狀態：Draft v0.1  
+> 文件狀態：Draft v0.2
 > 目的：定義第一個可玩版本的遊戲架構與戰鬥規則基準。本文數值皆為初版平衡起點，需經遊玩測試後調整。
 
 ## 文件職責與維護規則
@@ -195,61 +195,63 @@ MVP 系統
 
 ```text
 LINE App／External Browser
-├─ Static LINE Login Frontend
-│  ├─ 作為 LINE MINI App Endpoint，承接 LINE 登入回呼
-│  ├─ LINE App 內：初始化 LIFF 並取得 ID token
-│  ├─ 外部瀏覽器：偵測登入狀態並在需要時明確執行 LINE Login
-│  └─ 以頂層表單 POST 將 ID token 傳至 Django，不將 token 放入 URL
-│
-└─ Python 3／Django Server-rendered Web App
-   ├─ Authentication Endpoint
-   │  ├─ 驗證 Static LINE Login Frontend 的 Origin
-   │  ├─ 向 LINE Platform 驗證 ID token
-   │  └─ 建立第一方 Django Session 後重新導向遊戲
-   │
-   ├─ Server-rendered HTML + CSS + 少量 JavaScript
-   │  ├─ 登入後頁面仍由 Django Template 顯示
-   │  └─ 一般遊戲操作仍使用同源 Form、Session 與 CSRF
-   │
-   ├─ View / Form
-   │  ├─ 驗證登入、輸入與權限
-   │  └─ 呼叫應用服務，不直接計算戰鬥
-   │
-   ├─ Platform Adapter
-   │  └─ LineIdentityService：向 LINE Platform 驗證 token 並正規化身分
-   │
-   ├─ Game Service
-   │  ├─ EncounterService：依地區抽選怪物
-   │  ├─ BattleService：模擬完整戰鬥
-   │  ├─ RewardService：計算 EXP、Gold、熟練度與掉落
-   │  └─ ProgressionService：升級與轉職
-   │
-   ├─ Domain Rules
-   │  ├─ 命中、傷害、暴擊與逃跑公式
-   │  └─ 狀態驗證與數值上下限
-   │
-   └─ Database
-      ├─ 標準本機環境：Docker Compose + PostgreSQL
-      ├─ 輕量替代環境：直接執行 Django + SQLite
-      └─ 部署環境：PostgreSQL
+└─ React + TypeScript + Vite Frontend
+   ├─ 作為完整遊戲 Web Client 與 LINE MINI App Endpoint
+   ├─ 負責 LIFF 初始化、登入狀態、頁面路由、互動與 API 呼叫
+   ├─ LINE App 內：初始化 LIFF 並取得 ID token
+   ├─ 外部瀏覽器：偵測登入狀態並在需要時明確執行 LINE Login
+   └─ 以 HTTPS JSON Request 將 ID token 傳至 Backend API，不將 token 放入 URL
+      │
+      └─ REST API
+         └─ Python 3／Django + Django REST Framework Backend
+            ├─ Authentication API：驗證 Frontend Origin 與 LINE ID token，建立 Session 並簽發 API Token
+            ├─ API View／Serializer：驗證 HTTP、輸入與權限，呼叫 Application Service
+            ├─ Platform Adapter：隔離 LINE Platform 驗證與正規化
+            ├─ Game Service：協調遭遇、戰鬥、獎勵與成長流程
+            ├─ Domain Rules：執行純規則計算，不依賴 React 或 LIFF
+            └─ PostgreSQL：保存帳號、角色、遊戲內容、物品與戰鬥紀錄
 ```
 
-第一版不需要 React、WebSocket、Redis、Celery、Service Message、LINE Pay、In-App Purchase 或 AI。戰鬥敘述先使用固定文字模板，以維持速度、成本與可預測性。
+```text
+Repository 結構
+├─ backend
+│  ├─ Django + Django REST Framework
+│  └─ Authentication、API、Application Service 與 Domain Rules
+│
+├─ frontend
+│  ├─ React + TypeScript + Vite
+│  └─ API Client、LIFF Adapter、Page 與 Component
+│
+├─ compose.yaml
+│  └─ 本機整合 frontend、backend 與 PostgreSQL
+│
+├─ render.dev.yaml
+│  └─ Development Frontend、Backend 與 Database
+│
+└─ render.yaml
+   └─ Production Frontend、Backend 與 Database
+```
 
-標準本機環境使用 Docker Compose 統一 Python、Django 與 PostgreSQL 版本，以支援不同電腦間的一致開發流程。程式碼、Migration 與初始化資料定義透過 Git 同步；Docker Volume 只保存單一電腦的本機資料，不視為跨電腦資料同步機制。
+前端與後端必須可以獨立建置、部署與測試。Backend API 不得依賴 React Component、瀏覽器路由或 LIFF 原始物件；Frontend 不得直接存取資料庫，也不得自行決定戰鬥、成長、掉落、轉職、背包或排行榜結果。
+
+第一版採 React、TypeScript、Vite、Axios、Django REST Framework、django-cors-headers 與 PostgreSQL。除上述前後端分離所需套件外，不加入大型 UI Framework、WebSocket、Redis、Celery、Service Message、LINE Pay、In-App Purchase 或 AI。戰鬥敘述先使用固定文字模板，以維持速度、成本與可預測性。
+
+標準本機環境使用 Docker Compose 統一 Node、Python、Django 與 PostgreSQL 版本，以支援不同電腦間的一致開發流程。程式碼、Migration 與初始化資料定義透過 Git 同步；Docker Volume 只保存單一電腦的本機資料，不視為跨電腦資料同步機制。
 
 ### 4.1 LINE 身分與執行環境
 
 ```text
 LINE 身分流程
-├─ 1. Static LINE Login Frontend 載入並初始化 LIFF SDK
-├─ 2. Static LINE Login Frontend 取得 ID token
-├─ 3. 以頂層表單將 ID token 送至 Django `POST /auth/line/`
-├─ 4. Django 驗證請求 Origin，只接受設定中的 Static LINE Login Frontend
-├─ 5. Django 向 `POST https://api.line.me/oauth2/v2.1/verify` 驗證 token、Channel 與有效期限
-├─ 6. 以驗證後的 LINE user ID 對應本地帳號
-├─ 7. 建立第一方 Django Session
-└─ 8. 重新導向 Django 遊戲首頁，後續請求使用伺服器 Session
+├─ 1. React Frontend 載入並初始化 LIFF SDK
+├─ 2. Frontend 先向 `GET /api/auth/session/` 查詢既有登入狀態
+├─ 3. 尚未登入時由 Frontend 取得 LINE ID token
+├─ 4. Frontend 以 JSON 將 ID token 送至 `POST /api/auth/line/`
+├─ 5. Django 驗證請求 Origin、輸入格式與後端 LINE Channel 設定
+├─ 6. Django 向 `POST https://api.line.me/oauth2/v2.1/verify` 驗證 token、Channel 與有效期限
+├─ 7. 以驗證後的 LINE user ID 對應本地 ExternalIdentity 與 GameAccount
+├─ 8. 建立第一方 Django Session 並簽發 DRF API Token
+├─ 9. Frontend 將 API Token 保存於目前分頁的 `sessionStorage`
+└─ 10. 後續 API Request 使用 `Authorization: Token <api_token>`，登出時後端撤銷 Token
 ```
 
 禁止將 `liff.getProfile()` 或 decoded token 的內容直接當成後端權威身分。LINE user ID 僅在同一 Provider 範圍內識別使用者；資料模型應保存 Provider／Channel 脈絡，並以獨立身分關聯連接遊戲帳號。
@@ -257,24 +259,89 @@ LINE 身分流程
 ```text
 執行環境
 ├─ LINE App 內
-│  ├─ 以 Static LINE Login Frontend 作為 LINE MINI App Endpoint
+│  ├─ 以 React Frontend 作為 LINE MINI App Endpoint
 │  ├─ LIFF 初始化成功後進行登入交換
 │  └─ LIFF 初始化失敗時顯示可重試的錯誤狀態
 │
 ├─ 外部瀏覽器
-│  ├─ 由 Static LINE Login Frontend 明確引導 LINE Login
+│  ├─ 由 React Frontend 明確引導 LINE Login
 │  └─ 非 LINE 使用者只能看到登入／導引頁，不可建立匿名遊戲進度
 │
 └─ 共通要求
-   ├─ Endpoint 與載入內容全部使用 HTTPS
-   ├─ LINE 回呼不得直接進入受限於短 Request Line 的應用伺服器
-   ├─ ID token 只允許置於表單正文，不得置於 query string 或 fragment
+   ├─ Frontend、Backend API 與載入內容全部使用 HTTPS
+   ├─ ID token 只允許置於 HTTPS JSON Request Body，不得置於 query string 或 fragment
+   ├─ API Token 不得保存於 URL、localStorage、程式碼或可提交的設定檔
    ├─ 手機直向與 LINE MINI App Full View 優先
    ├─ UI 避開安全區域、瀏海與 LINE 內建 Header
    └─ 不在 URL、log、錯誤訊息或分析資料洩漏 token
 ```
 
-### 4.2 建議核心資料模型
+### 4.2 Frontend、API 與認證契約
+
+```text
+前後端契約
+├─ Frontend API Layer
+│  ├─ 集中管理 API Base URL、Authorization、CSRF 與錯誤正規化
+│  ├─ React Component 不得散落 Axios／Fetch 實作
+│  └─ Production Build 缺少 API URL 時必須失敗，不得靜默使用 localhost
+│
+├─ Authentication API
+│  ├─ `GET /api/auth/session/`：取得登入狀態、使用者摘要與 CSRF Token
+│  ├─ `POST /api/auth/line/`：交換 LINE ID token，回傳登入狀態與 API Token
+│  └─ `POST /api/auth/logout/`：撤銷目前 API Token 並清除 Django Session
+│
+├─ API Authentication
+│  ├─ 預設支援 DRF TokenAuthentication
+│  ├─ SessionAuthentication 僅作第一方 Session 與開發／管理相容用途
+│  ├─ 除登入與 Session Bootstrap 外，遊戲 API 預設要求已驗證身分
+│  └─ 收到 401 時清除失效 API Token，重新取得登入狀態，不無限重試
+│
+└─ Cross-origin Security
+   ├─ CORS 只允許明確設定的 Frontend Origin，不使用萬用字元
+   ├─ CSRF Trusted Origins 只允許明確設定的 Frontend Origin
+   ├─ 需要跨站 Cookie 時僅透過 HTTPS，並設定 Secure 與適當 SameSite
+   └─ Origin、Host、Channel 與 Redirect Target 均由後端白名單驗證
+```
+
+遊戲 API 採資源導向 JSON 契約；建立、戰鬥、裝備、轉職與其他寫入操作只接受操作意圖及允許的識別碼。API Response 回傳後端已完成驗證與結算的結構化結果，React 只負責呈現。
+
+### 4.3 建置、部署與環境隔離
+
+```text
+部署架構
+├─ Development｜develop Branch
+│  ├─ Development Static Frontend
+│  ├─ Development Backend API
+│  ├─ Development PostgreSQL
+│  └─ Developing LIFF ID／Channel ID
+│
+└─ Production｜main Branch
+   ├─ Production Static Frontend
+   ├─ Production Backend API
+   ├─ Production PostgreSQL
+   └─ Published LIFF ID／Channel ID
+```
+
+```text
+環境變數責任
+├─ Frontend
+│  ├─ `VITE_API_URL`：對應環境的 Backend API Base URL
+│  ├─ `VITE_APP_ENV`：development 或 production
+│  └─ `VITE_LIFF_ID`：對應環境的 LIFF ID
+│
+└─ Backend
+   ├─ `DEBUG`：部署環境固定為 False
+   ├─ `DJANGO_SECRET_KEY`：各環境獨立管理，不進入 Repository
+   ├─ `DATABASE_URL`：對應環境的 PostgreSQL
+   ├─ `FRONTEND_URL`：唯一主要 Frontend URL
+   ├─ `CORS_ALLOWED_ORIGINS`：允許的 Frontend Origin 清單
+   ├─ `CSRF_TRUSTED_ORIGINS`：信任的 Frontend Origin 清單
+   └─ `LINE_CHANNEL_ID`：與該環境 LIFF ID 相同 Channel 的 Channel ID
+```
+
+Development 與 Production 不得共用資料庫、Django Secret、LIFF ID 或 LINE Channel ID。Render 的 Backend 與 Static Frontend 必須分別部署；Frontend Build 完成後產生靜態檔案，Backend 啟動前完成 Migration，兩者使用健康檢查與實際登入流程驗證。Review 環境只有在準備 LINE MINI App 審查時建立或設定。
+
+### 4.4 建議核心資料模型
 
 ```text
 核心資料模型
@@ -325,7 +392,7 @@ LINE 身分流程
 
 `Job`、`Area`、`Monster` 與 `Item` 共用 `source_work`、`source_reference`、`adaptation_type`、`lore_note` 四個內容來源欄位。`adaptation_type` 限定為 `canonical`（原典）、`adapted`（改編）或 `original`（原創）；純原創內容的 `source_work` 可以留白，但 `source_reference` 應說明可辨識的設計依據。未來新增 NPC 或 Skill 內容模型時沿用相同契約，玩家建立的 `Player` 不使用這些欄位。
 
-### 4.3 戰鬥核心邊界
+### 4.5 戰鬥核心邊界
 
 ```text
 BattleState
@@ -352,7 +419,7 @@ BattleState
 
 MVP 遭遇與持久化流程仍建立 1 名玩家對 1 隻怪物，不新增 Party、Summon 或 Formation Model。集合式 Domain 介面只用來解除戰鬥公式對單一 Player／Monster 的硬編碼，並提供決定性的 1 對 2 測試，不代表多人隊伍已納入 MVP。
 
-### 4.4 本機等級模擬區
+### 4.6 本機等級模擬區
 
 ```text
 等級模擬場
@@ -982,10 +1049,11 @@ Gold +42
 ├─ LINE 身分驗證
 │  ├─ 後端只信任經 LINE Platform 驗證成功的 token 結果
 │  ├─ 驗證 Channel、有效期限與必要 claims
-│  ├─ 登入交換只接受設定中的 Static LINE Login Frontend Origin
-│  ├─ ID token 只透過 HTTPS 表單正文傳輸，不得放入 URL
+│  ├─ 登入交換只接受設定中的 React Frontend Origin
+│  ├─ ID token 只透過 HTTPS JSON Request Body 傳輸，不得放入 URL
 │  ├─ 不接受前端 profile 或 LINE user ID 作為登入依據
-│  └─ token、LIFF URL fragment 與敏感資料不得寫入 log
+│  ├─ API Token 只保存於 sessionStorage，登出時由後端撤銷
+│  └─ token、Authorization Header、LIFF URL fragment 與敏感資料不得寫入 log
 │
 ├─ 伺服器驗證
 │  ├─ 玩家只能操作自己的角色
@@ -1084,10 +1152,13 @@ Gold +42
 └─ 11. LINE 執行環境
    ├─ Mock LINE Platform 測試 token 成功、過期、錯誤 Channel 與驗證失敗
    ├─ 測試登入交換接受允許 Origin 並拒絕其他 Origin 或缺少 Origin 的請求
-   ├─ 測試登入成功後建立第一方 Django Session 並重新導向遊戲
+   ├─ 測試登入成功後建立第一方 Django Session 並簽發可用的 API Token
+   ├─ 測試 Session Bootstrap、Token Authentication、401 清除與 Logout 撤銷
+   ├─ 測試 CORS 與 CSRF 只接受明確設定的 Frontend Origin
    ├─ 測試 LIFF Browser 與外部瀏覽器登入流程
-   ├─ 測試 Static LINE Login Frontend 的初始化、登入、表單交換與錯誤狀態
+   ├─ 測試 React Frontend 的初始化、登入、JSON 交換與錯誤狀態
    ├─ 測試 LIFF 初始化失敗與重試畫面
+   ├─ 測試 Production Build 缺少 VITE_API_URL 時失敗
    └─ 負載測試不得透過正式 LIFF URL 或大量呼叫 LINE API
 ```
 
@@ -1119,10 +1190,13 @@ MVP 開發
 │  └─ 排行榜
 │
 ├─ 5. 完成 LINE-ready 整合
-│  ├─ Static LINE Login Frontend 承接 LIFF 初始化與 LINE Login 回呼
-│  ├─ 透過表單正文與 Django 交換 token 並建立第一方 Session
+│  ├─ React Frontend 承接完整遊戲介面、LIFF 初始化與 LINE Login 回呼
+│  ├─ Django REST Framework 提供 Authentication 與遊戲 JSON API
+│  ├─ 透過 JSON Request Body 交換 ID token，建立第一方 Session 並簽發 API Token
+│  ├─ API Client 集中管理 Authorization、CSRF 與錯誤狀態
 │  ├─ LINE App 與外部瀏覽器入口
 │  ├─ HTTPS、手機 Full View、安全區域與錯誤狀態
+│  ├─ Development／Production 前後端與 LINE 環境隔離
 │  └─ 不包含 Service Message、付款或正式送審
 │
 └─ 6. 平衡與擴充內容
@@ -1189,4 +1263,4 @@ LINE Developers Console 設定、建立 Channel、正式串接、發布與送審
 
 ## 16. MVP 完成定義
 
-第一版只有在玩家能以經驗證的 LINE 身分進入，從新角色開始完成「選區戰鬥、取得獎勵、換裝成長、Lv.5 由遊方客完成第一次轉職、繼續升至 Lv.99、出現在排行榜」的完整流程，且 LINE App／外部瀏覽器登入、戰鬥規則、自動化測試與並行防重複發獎皆通過驗證時，才視為完成。第二階與第三階職業屬完整職業樹範圍，不是 MVP 完成條件。Verified MINI App 送審、Service Message 與付款不屬於 MVP 完成條件。
+第一版只有在 React Frontend 與 Django REST API 可獨立建置及部署，玩家能以經驗證的 LINE 身分進入，從新角色開始完成「選區戰鬥、取得獎勵、換裝成長、Lv.5 由遊方客完成第一次轉職、繼續升至 Lv.99、出現在排行榜」的完整流程，且 Development／Production 環境隔離、LINE App／外部瀏覽器登入、API 權限、戰鬥規則、自動化測試與並行防重複發獎皆通過驗證時，才視為完成。第二階與第三階職業屬完整職業樹範圍，不是 MVP 完成條件。Verified MINI App 送審、Service Message 與付款不屬於 MVP 完成條件。

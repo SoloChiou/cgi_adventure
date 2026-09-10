@@ -1,8 +1,0 @@
-{
-  "name": "cgi_adventure_line_login",
-  "private": true,
-  "scripts": {
-    "build": "node build.js",
-    "test": "node --test line_login.test.js"
-  }
-}
