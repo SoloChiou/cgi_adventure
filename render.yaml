@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: cgi-adventure-login-dev
+    runtime: static
+    branch: develop
+    rootDir: line_login_frontend
+    buildCommand: npm run build
+    staticPublishPath: ./dist
+    autoDeployTrigger: commit
+    envVars:
+      - key: LINE_LIFF_ID
+        sync: false
+      - key: LINE_BACKEND_LOGIN_URL
+        value: https://cgi-adventure.onrender.com/auth/line/
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

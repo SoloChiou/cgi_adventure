@@ -1,4 +1,4 @@
-import json
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth import login
@@ -7,9 +7,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from .forms import DevelopmentAuthenticationForm, DevelopmentPlayerForm, PlayerCreateForm
@@ -54,6 +55,12 @@ class DevelopmentLoginView(LoginView):
             raise Http404
         return super().post(request, *args, **kwargs)
 
+    def get(self, request, *args, **kwargs):
+        if not settings.DEBUG and settings.LINE_LOGIN_FRONTEND_URL:
+            query = urlencode({"next": request.GET.get("next", "")})
+            return redirect("{}?{}".format(settings.LINE_LOGIN_FRONTEND_URL, query))
+        return super().get(request, *args, **kwargs)
+
     def get_initial(self):
         initial = super().get_initial()
         if settings.DEBUG:
@@ -65,40 +72,44 @@ class DevelopmentLoginView(LoginView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["line_liff_id"] = settings.LINE_LIFF_ID
-        context["line_login_enabled"] = bool(settings.LINE_LIFF_ID and settings.LINE_CHANNEL_ID)
         context["development_login_enabled"] = settings.DEBUG
         return context
 
 
+def _line_login_error(request, message, status):
+    return render(request, "registration/line_login_error.html", {
+        "message": message,
+        "retry_url": settings.LINE_LOGIN_FRONTEND_URL,
+    }, status=status)
+
+
+@csrf_exempt
 @require_POST
 def line_login(request):
-    try:
-        payload = json.loads(request.body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"error": "登入資料格式錯誤。"}, status=400)
-    if not isinstance(payload, dict):
-        return JsonResponse({"error": "登入資料格式錯誤。"}, status=400)
+    allowed_origin = settings.LINE_LOGIN_FRONTEND_ORIGIN
+    request_origin = request.headers.get("Origin", "").rstrip("/")
+    if not allowed_origin or request_origin != allowed_origin:
+        return _line_login_error(request, "LINE 登入來源無效。", 403)
 
     try:
         identity = verify_line_id_token(
-            payload.get("id_token"),
+            request.POST.get("id_token"),
             settings.LINE_CHANNEL_ID,
         )
         user = get_or_create_line_user(identity)
-    except LineIdentityError as error:
-        return JsonResponse({"error": str(error)}, status=401)
+    except LineIdentityError:
+        return _line_login_error(request, "LINE 身分驗證失敗。", 401)
 
     login(request, user)
     default_redirect_url = resolve_url(settings.LOGIN_REDIRECT_URL)
-    redirect_url = payload.get("next") or default_redirect_url
+    redirect_url = request.POST.get("next") or default_redirect_url
     if not url_has_allowed_host_and_scheme(
         redirect_url,
         allowed_hosts={request.get_host()},
         require_https=request.is_secure(),
     ):
         redirect_url = default_redirect_url
-    return JsonResponse({"redirect_url": redirect_url})
+    return redirect(redirect_url)
 
 
 def _get_player(user):

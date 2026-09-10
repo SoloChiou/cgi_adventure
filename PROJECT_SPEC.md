@@ -195,33 +195,43 @@ MVP 系統
 
 ```text
 LINE App／External Browser
-└─ HTTPS Web App
-   ├─ LIFF SDK
-   │  ├─ LINE App 內：初始化 LIFF 並取得登入 token
-   │  └─ 外部瀏覽器：偵測登入狀態並在需要時明確執行 LINE Login
+├─ Static LINE Login Frontend
+│  ├─ 作為 LINE MINI App Endpoint，承接 LINE 登入回呼
+│  ├─ LINE App 內：初始化 LIFF 並取得 ID token
+│  ├─ 外部瀏覽器：偵測登入狀態並在需要時明確執行 LINE Login
+│  └─ 以頂層表單 POST 將 ID token 傳至 Django，不將 token 放入 URL
+│
+└─ Python 3／Django Server-rendered Web App
+   ├─ Authentication Endpoint
+   │  ├─ 驗證 Static LINE Login Frontend 的 Origin
+   │  ├─ 向 LINE Platform 驗證 ID token
+   │  └─ 建立第一方 Django Session 後重新導向遊戲
    │
-   └─ Python 3／Django Server-rendered HTML + CSS + 少量 JavaScript
-      ├─ View / Form
-      │  ├─ 驗證登入、輸入與權限
-      │  └─ 呼叫應用服務，不直接計算戰鬥
-      │
-      ├─ Platform Adapter
-      │  └─ LineIdentityService：向 LINE Platform 驗證 token 並正規化身分
-      │
-      ├─ Game Service
-      │  ├─ EncounterService：依地區抽選怪物
-      │  ├─ BattleService：模擬完整戰鬥
-      │  ├─ RewardService：計算 EXP、Gold、熟練度與掉落
-      │  └─ ProgressionService：升級與轉職
-      │
-      ├─ Domain Rules
-      │  ├─ 命中、傷害、暴擊與逃跑公式
-      │  └─ 狀態驗證與數值上下限
-      │
-      └─ Database
-         ├─ 標準本機環境：Docker Compose + PostgreSQL
-         ├─ 輕量替代環境：直接執行 Django + SQLite
-         └─ 部署環境：PostgreSQL
+   ├─ Server-rendered HTML + CSS + 少量 JavaScript
+   │  ├─ 登入後頁面仍由 Django Template 顯示
+   │  └─ 一般遊戲操作仍使用同源 Form、Session 與 CSRF
+   │
+   ├─ View / Form
+   │  ├─ 驗證登入、輸入與權限
+   │  └─ 呼叫應用服務，不直接計算戰鬥
+   │
+   ├─ Platform Adapter
+   │  └─ LineIdentityService：向 LINE Platform 驗證 token 並正規化身分
+   │
+   ├─ Game Service
+   │  ├─ EncounterService：依地區抽選怪物
+   │  ├─ BattleService：模擬完整戰鬥
+   │  ├─ RewardService：計算 EXP、Gold、熟練度與掉落
+   │  └─ ProgressionService：升級與轉職
+   │
+   ├─ Domain Rules
+   │  ├─ 命中、傷害、暴擊與逃跑公式
+   │  └─ 狀態驗證與數值上下限
+   │
+   └─ Database
+      ├─ 標準本機環境：Docker Compose + PostgreSQL
+      ├─ 輕量替代環境：直接執行 Django + SQLite
+      └─ 部署環境：PostgreSQL
 ```
 
 第一版不需要 React、WebSocket、Redis、Celery、Service Message、LINE Pay、In-App Purchase 或 AI。戰鬥敘述先使用固定文字模板，以維持速度、成本與可預測性。
@@ -232,12 +242,14 @@ LINE App／External Browser
 
 ```text
 LINE 身分流程
-├─ 1. 前端載入並初始化 LIFF SDK
-├─ 2. 取得 ID token 或 access token
-├─ 3. 將 ID token 傳至 `POST /auth/line/`
-├─ 4. Django 向 `POST https://api.line.me/oauth2/v2.1/verify` 驗證 token、Channel 與有效期限
-├─ 5. 以驗證後的 LINE user ID 對應本地帳號
-└─ 6. 建立 Django Session，後續遊戲請求使用伺服器 Session
+├─ 1. Static LINE Login Frontend 載入並初始化 LIFF SDK
+├─ 2. Static LINE Login Frontend 取得 ID token
+├─ 3. 以頂層表單將 ID token 送至 Django `POST /auth/line/`
+├─ 4. Django 驗證請求 Origin，只接受設定中的 Static LINE Login Frontend
+├─ 5. Django 向 `POST https://api.line.me/oauth2/v2.1/verify` 驗證 token、Channel 與有效期限
+├─ 6. 以驗證後的 LINE user ID 對應本地帳號
+├─ 7. 建立第一方 Django Session
+└─ 8. 重新導向 Django 遊戲首頁，後續請求使用伺服器 Session
 ```
 
 禁止將 `liff.getProfile()` 或 decoded token 的內容直接當成後端權威身分。LINE user ID 僅在同一 Provider 範圍內識別使用者；資料模型應保存 Provider／Channel 脈絡，並以獨立身分關聯連接遊戲帳號。
@@ -245,15 +257,18 @@ LINE 身分流程
 ```text
 執行環境
 ├─ LINE App 內
+│  ├─ 以 Static LINE Login Frontend 作為 LINE MINI App Endpoint
 │  ├─ LIFF 初始化成功後進行登入交換
 │  └─ LIFF 初始化失敗時顯示可重試的錯誤狀態
 │
 ├─ 外部瀏覽器
-│  ├─ 需要登入的功能明確引導 LINE Login
+│  ├─ 由 Static LINE Login Frontend 明確引導 LINE Login
 │  └─ 非 LINE 使用者只能看到登入／導引頁，不可建立匿名遊戲進度
 │
 └─ 共通要求
    ├─ Endpoint 與載入內容全部使用 HTTPS
+   ├─ LINE 回呼不得直接進入受限於短 Request Line 的應用伺服器
+   ├─ ID token 只允許置於表單正文，不得置於 query string 或 fragment
    ├─ 手機直向與 LINE MINI App Full View 優先
    ├─ UI 避開安全區域、瀏海與 LINE 內建 Header
    └─ 不在 URL、log、錯誤訊息或分析資料洩漏 token
@@ -967,6 +982,8 @@ Gold +42
 ├─ LINE 身分驗證
 │  ├─ 後端只信任經 LINE Platform 驗證成功的 token 結果
 │  ├─ 驗證 Channel、有效期限與必要 claims
+│  ├─ 登入交換只接受設定中的 Static LINE Login Frontend Origin
+│  ├─ ID token 只透過 HTTPS 表單正文傳輸，不得放入 URL
 │  ├─ 不接受前端 profile 或 LINE user ID 作為登入依據
 │  └─ token、LIFF URL fragment 與敏感資料不得寫入 log
 │
@@ -1066,7 +1083,10 @@ Gold +42
 │
 └─ 11. LINE 執行環境
    ├─ Mock LINE Platform 測試 token 成功、過期、錯誤 Channel 與驗證失敗
+   ├─ 測試登入交換接受允許 Origin 並拒絕其他 Origin 或缺少 Origin 的請求
+   ├─ 測試登入成功後建立第一方 Django Session 並重新導向遊戲
    ├─ 測試 LIFF Browser 與外部瀏覽器登入流程
+   ├─ 測試 Static LINE Login Frontend 的初始化、登入、表單交換與錯誤狀態
    ├─ 測試 LIFF 初始化失敗與重試畫面
    └─ 負載測試不得透過正式 LIFF URL 或大量呼叫 LINE API
 ```
@@ -1099,7 +1119,8 @@ MVP 開發
 │  └─ 排行榜
 │
 ├─ 5. 完成 LINE-ready 整合
-│  ├─ LIFF 初始化與 LINE Login token 交換
+│  ├─ Static LINE Login Frontend 承接 LIFF 初始化與 LINE Login 回呼
+│  ├─ 透過表單正文與 Django 交換 token 並建立第一方 Session
 │  ├─ LINE App 與外部瀏覽器入口
 │  ├─ HTTPS、手機 Full View、安全區域與錯誤狀態
 │  └─ 不包含 Service Message、付款或正式送審

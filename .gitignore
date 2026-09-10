@@ -4,5 +4,6 @@ db.sqlite3
 .env
 .venv/
 staticfiles/
+line_login_frontend/dist/
 coverage.xml
 .coverage

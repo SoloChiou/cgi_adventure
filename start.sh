@@ -3,6 +3,4 @@ set -e
 
 python manage.py migrate
 python manage.py collectstatic --no-input
-exec gunicorn cgi_adventure.wsgi:application \
-    --bind "0.0.0.0:${PORT:-8000}" \
-    --limit-request-line 8190
+exec gunicorn cgi_adventure.wsgi:application --bind "0.0.0.0:${PORT:-8000}"

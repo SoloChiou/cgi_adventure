@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import dj_database_url
 
@@ -87,5 +88,11 @@ LOGIN_REDIRECT_URL = "game:home"
 LOGOUT_REDIRECT_URL = "login"
 DEV_ADMIN_USERNAME = os.environ.get("DEV_ADMIN_USERNAME", "")
 DEV_ADMIN_PASSWORD = os.environ.get("DEV_ADMIN_PASSWORD", "")
-LINE_LIFF_ID = os.environ.get("LINE_LIFF_ID", "")
 LINE_CHANNEL_ID = os.environ.get("LINE_CHANNEL_ID", "")
+LINE_LOGIN_FRONTEND_URL = os.environ.get("LINE_LOGIN_FRONTEND_URL", "").rstrip("/")
+line_login_frontend_parts = urlsplit(LINE_LOGIN_FRONTEND_URL)
+LINE_LOGIN_FRONTEND_ORIGIN = (
+    "{}://{}".format(line_login_frontend_parts.scheme, line_login_frontend_parts.netloc)
+    if line_login_frontend_parts.scheme and line_login_frontend_parts.netloc
+    else ""
+)

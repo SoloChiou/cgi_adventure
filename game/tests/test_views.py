@@ -1,4 +1,3 @@
-import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -68,15 +67,21 @@ class DevelopmentLoginTests(TestCase):
         response = self.client.post(reverse("login"), {"username": "test-admin", "password": "anything"})
         self.assertEqual(response.status_code, 404)
 
-    @override_settings(DEBUG=False, LINE_LIFF_ID="123-test", LINE_CHANNEL_ID="123")
-    def test_production_login_initializes_liff(self):
-        response = self.client.get(reverse("login"))
-        self.assertContains(response, "static.line-scdn.net/liff/edge/2/sdk.js")
-        self.assertContains(response, 'data-login-enabled="true"')
-        self.assertContains(response, "123-test")
+    @override_settings(DEBUG=False, LINE_LOGIN_FRONTEND_URL="https://login.example")
+    def test_production_login_redirects_to_static_frontend(self):
+        response = self.client.get("{}?next=/inventory/".format(reverse("login")))
+        self.assertRedirects(
+            response,
+            "https://login.example?next=%2Finventory%2F",
+            fetch_redirect_response=False,
+        )
 
 
-@override_settings(LINE_CHANNEL_ID="123")
+@override_settings(
+    LINE_CHANNEL_ID="123",
+    LINE_LOGIN_FRONTEND_URL="https://login.example",
+    LINE_LOGIN_FRONTEND_ORIGIN="https://login.example",
+)
 class LineLoginTests(TestCase):
     @patch("game.views.verify_line_id_token")
     def test_verified_identity_creates_session_and_reuses_account(self, verify):
@@ -84,20 +89,19 @@ class LineLoginTests(TestCase):
 
         first = self.client.post(
             reverse("line_login"),
-            data=json.dumps({"id_token": "first-token", "next": "/"}),
-            content_type="application/json",
+            data={"id_token": "first-token", "next": "/"},
+            HTTP_ORIGIN="https://login.example",
         )
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(first.json()["redirect_url"], "/")
+        self.assertRedirects(first, "/", fetch_redirect_response=False)
         first_user_id = int(self.client.session["_auth_user_id"])
         self.client.logout()
 
         second = self.client.post(
             reverse("line_login"),
-            data=json.dumps({"id_token": "second-token", "next": "/"}),
-            content_type="application/json",
+            data={"id_token": "second-token", "next": "/"},
+            HTTP_ORIGIN="https://login.example",
         )
-        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.status_code, 302)
         self.assertEqual(int(self.client.session["_auth_user_id"]), first_user_id)
         self.assertEqual(ExternalIdentity.objects.count(), 1)
         self.assertEqual(GameAccount.objects.count(), 1)
@@ -108,30 +112,34 @@ class LineLoginTests(TestCase):
     def test_invalid_token_does_not_create_session(self, verify):
         response = self.client.post(
             reverse("line_login"),
-            data=json.dumps({"id_token": "invalid-token"}),
-            content_type="application/json",
+            data={"id_token": "invalid-token"},
+            HTTP_ORIGIN="https://login.example",
         )
         self.assertEqual(response.status_code, 401)
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertEqual(GameAccount.objects.count(), 0)
 
-    def test_non_object_payload_is_rejected(self):
+    def test_missing_origin_is_rejected(self):
+        response = self.client.post(reverse("line_login"), data={"id_token": "token"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_untrusted_origin_is_rejected(self):
         response = self.client.post(
             reverse("line_login"),
-            data=json.dumps(["token"]),
-            content_type="application/json",
+            data={"id_token": "token"},
+            HTTP_ORIGIN="https://evil.example",
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 403)
 
     @patch("game.views.verify_line_id_token")
     def test_external_redirect_is_rejected(self, verify):
         verify.return_value = VerifiedLineIdentity(user_id="U123", channel_id="123")
         response = self.client.post(
             reverse("line_login"),
-            data=json.dumps({"id_token": "token", "next": "https://evil.example/"}),
-            content_type="application/json",
+            data={"id_token": "token", "next": "https://evil.example/"},
+            HTTP_ORIGIN="https://login.example",
         )
-        self.assertEqual(response.json()["redirect_url"], "/")
+        self.assertRedirects(response, "/", fetch_redirect_response=False)
 
 
 class JobProgressionViewTests(TestCase):
