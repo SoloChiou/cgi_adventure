@@ -6,7 +6,10 @@ type Page = "game" | "inventory" | "leaderboard";
 
 function errorText(error: unknown) {
   const value = error as { response?: { data?: { detail?: string } } };
-  return value.response?.data?.detail || "操作失敗，請稍後再試。";
+  if (value.response?.data?.detail) return value.response.data.detail;
+  if (error instanceof Error && error.message.startsWith("LINE ")) return error.message;
+  if (error instanceof Error && error.message === "缺少 VITE_LIFF_ID") return error.message;
+  return "無法連接服務，請稍後再試。";
 }
 
 export default function App() {
