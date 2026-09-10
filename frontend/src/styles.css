@@ -7,6 +7,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .app { width: min(760px, 100%); min-height: 100vh; margin: auto; padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom)); }
 .center { min-height: 100vh; display: grid; place-content: center; text-align: center; padding: 2rem; }
 header, article, nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.header_actions { display: flex; align-items: center; gap: .5rem; }
+.header_actions button { padding: .6rem .75rem; white-space: nowrap; }
 header h1 { margin: .2rem 0 0; font-size: 1.5rem; letter-spacing: .08em; }
 .eyebrow, small { color: #b89b6c; }
 nav { justify-content: stretch; margin: 1.25rem 0; }
