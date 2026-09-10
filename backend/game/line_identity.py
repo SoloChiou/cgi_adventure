@@ -56,15 +56,20 @@ def get_or_create_line_user(identity):
     if external_identity:
         account = external_identity.account
     else:
-        digest = hashlib.sha256(
-            "{}:{}".format(identity.channel_id, identity.user_id).encode()
-        ).hexdigest()
-        user, user_created = get_user_model().objects.get_or_create(username="line_{}".format(digest))
-        if user_created:
-            user.set_unusable_password()
-            user.save(update_fields=["password"])
-        account, _ = GameAccount.objects.get_or_create(user=user)
-        ExternalIdentity.objects.create(
+        existing_identity = ExternalIdentity.objects.select_related("account__user").filter(
+            provider="line",
+            provider_user_id=identity.user_id,
+        ).order_by("id").first()
+        if existing_identity:
+            account = existing_identity.account
+        else:
+            digest = hashlib.sha256(identity.user_id.encode()).hexdigest()
+            user, user_created = get_user_model().objects.get_or_create(username="line_{}".format(digest))
+            if user_created:
+                user.set_unusable_password()
+                user.save(update_fields=["password"])
+            account, _ = GameAccount.objects.get_or_create(user=user)
+        ExternalIdentity.objects.get_or_create(
             account=account,
             provider="line",
             provider_user_id=identity.user_id,

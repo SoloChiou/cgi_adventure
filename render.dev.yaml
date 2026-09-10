@@ -27,6 +27,8 @@ services:
         value: https://cgi-adventure-web-dev.onrender.com
       - key: LINE_CHANNEL_ID
         sync: false
+      - key: LINE_WEB_CHANNEL_ID
+        sync: false
 
   - type: web
     name: cgi-adventure-web-dev
@@ -42,6 +44,8 @@ services:
       - key: VITE_APP_ENV
         value: development
       - key: VITE_LIFF_ID
+        sync: false
+      - key: VITE_WEB_LIFF_ID
         sync: false
     routes:
       - type: rewrite

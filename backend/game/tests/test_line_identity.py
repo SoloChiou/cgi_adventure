@@ -1,9 +1,10 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
-from game.line_identity import LineIdentityError, verify_line_id_token
+from game.line_identity import LineIdentityError, VerifiedLineIdentity, get_or_create_line_user, verify_line_id_token
+from game.models import ExternalIdentity, GameAccount
 
 
 class LineIdentityVerificationTests(SimpleTestCase):
@@ -32,3 +33,13 @@ class LineIdentityVerificationTests(SimpleTestCase):
     def test_missing_configuration_is_rejected_without_request(self):
         with self.assertRaises(LineIdentityError):
             verify_line_id_token("raw-token", "")
+
+
+class LineAccountTests(TestCase):
+    def test_same_provider_user_reuses_account_across_channels(self):
+        mini_user = get_or_create_line_user(VerifiedLineIdentity(user_id="U123", channel_id="mini"))
+        web_user = get_or_create_line_user(VerifiedLineIdentity(user_id="U123", channel_id="web"))
+
+        self.assertEqual(web_user.pk, mini_user.pk)
+        self.assertEqual(GameAccount.objects.count(), 1)
+        self.assertEqual(ExternalIdentity.objects.count(), 2)

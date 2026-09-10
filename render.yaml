@@ -29,6 +29,8 @@ services:
         sync: false
       - key: LINE_CHANNEL_ID
         sync: false
+      - key: LINE_WEB_CHANNEL_ID
+        sync: false
 
   - type: web
     name: cgi-adventure-web
@@ -44,6 +46,8 @@ services:
       - key: VITE_APP_ENV
         value: production
       - key: VITE_LIFF_ID
+        sync: false
+      - key: VITE_WEB_LIFF_ID
         sync: false
     routes:
       - type: rewrite

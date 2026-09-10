@@ -9,7 +9,7 @@ export interface BattleResult { battle_id: number; result: string; monster_snaps
 
 function remember(session: AuthSession) { if (session.csrf_token) setCsrfToken(session.csrf_token); if (session.api_token) setApiToken(session.api_token); return session; }
 export async function getSession() { try { return remember((await api.get<AuthSession>("/auth/session/")).data); } catch (error) { if (!axios.isAxiosError(error) || error.response?.status !== 401) throw error; setApiToken(""); return remember((await api.get<AuthSession>("/auth/session/")).data); } }
-export async function lineLogin(idToken: string) { return remember((await api.post<AuthSession>("/auth/line/", { id_token: idToken })).data); }
+export async function lineLogin(idToken: string, channelContext: "mini_app" | "web") { return remember((await api.post<AuthSession>("/auth/line/", { id_token: idToken, channel_context: channelContext })).data); }
 export async function devLogin() { return remember((await api.post<AuthSession>("/auth/dev/")).data); }
 export async function signOut() { await api.post("/auth/logout/"); setApiToken(""); setCsrfToken(""); }
 export async function getGame() { return (await api.get<GameState>("/game/")).data; }

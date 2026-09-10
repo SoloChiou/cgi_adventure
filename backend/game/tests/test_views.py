@@ -37,6 +37,31 @@ class AuthenticationApiTests(TestCase):
         self.assertEqual(ExternalIdentity.objects.count(), 1)
         self.assertEqual(GameAccount.objects.count(), 1)
 
+    @override_settings(LINE_CHANNEL_ID="mini", LINE_WEB_CHANNEL_ID="web", CORS_ALLOWED_ORIGINS=["https://web.example"])
+    @patch("game.views.verify_line_id_token")
+    def test_web_line_login_uses_web_channel(self, verify):
+        verify.return_value = VerifiedLineIdentity(user_id="U123", channel_id="web")
+        response = self.client.post(
+            reverse("game:line_login"),
+            {"id_token": "raw-token", "channel_context": "web"},
+            content_type="application/json",
+            HTTP_ORIGIN="https://web.example",
+        )
+        self.assertEqual(response.status_code, 200)
+        verify.assert_called_once_with("raw-token", "web")
+
+    @override_settings(LINE_CHANNEL_ID="mini", LINE_WEB_CHANNEL_ID="web", CORS_ALLOWED_ORIGINS=["https://web.example"])
+    @patch("game.views.verify_line_id_token")
+    def test_unknown_line_login_context_is_rejected(self, verify):
+        response = self.client.post(
+            reverse("game:line_login"),
+            {"id_token": "raw-token", "channel_context": "unknown"},
+            content_type="application/json",
+            HTTP_ORIGIN="https://web.example",
+        )
+        self.assertEqual(response.status_code, 400)
+        verify.assert_not_called()
+
     @override_settings(LINE_CHANNEL_ID="123", CORS_ALLOWED_ORIGINS=["https://web.example"])
     def test_line_login_rejects_untrusted_or_missing_origin(self):
         for origin in (None, "https://evil.example"):

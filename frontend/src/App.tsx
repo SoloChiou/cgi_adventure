@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { createPlayer, devLogin, equip, fight, getGame, getInventory, getJobs, getLeaderboard, getSession, lineLogin, signOut, transitionJob, type BattleResult, type GameState } from "./api/game";
-import { getLineIdToken, logoutLine } from "./services/line";
+import { getLineLogin, logoutLine } from "./services/line";
 
 type Page = "game" | "inventory" | "leaderboard";
 
@@ -8,7 +8,7 @@ function errorText(error: unknown) {
   const value = error as { response?: { data?: { detail?: string } } };
   if (value.response?.data?.detail) return value.response.data.detail;
   if (error instanceof Error && error.message.startsWith("LINE ")) return error.message;
-  if (error instanceof Error && error.message === "缺少 VITE_LIFF_ID") return error.message;
+  if (error instanceof Error && error.message.startsWith("缺少 VITE_")) return error.message;
   return "無法連接服務，請稍後再試。";
 }
 
@@ -28,8 +28,11 @@ export default function App() {
     try {
       let session = await getSession();
       if (!session.authenticated) {
-        if (import.meta.env.DEV && !import.meta.env.VITE_LIFF_ID?.trim()) session = await devLogin();
-        else session = await lineLogin(await getLineIdToken());
+        if (import.meta.env.DEV && !import.meta.env.VITE_LIFF_ID?.trim() && !import.meta.env.VITE_WEB_LIFF_ID?.trim()) session = await devLogin();
+        else {
+          const line = await getLineLogin();
+          session = await lineLogin(line.idToken, line.channelContext);
+        }
       }
       setAuthenticated(session.authenticated);
       if (session.authenticated) await refresh();

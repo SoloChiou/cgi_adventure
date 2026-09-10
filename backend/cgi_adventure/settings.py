@@ -96,6 +96,7 @@ CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
 CSRF_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
 LINE_CHANNEL_ID = os.environ.get("LINE_CHANNEL_ID", "").strip()
+LINE_WEB_CHANNEL_ID = os.environ.get("LINE_WEB_CHANNEL_ID", "").strip()
 ENABLE_DEV_LOGIN = DEBUG and os.environ.get("ENABLE_DEV_LOGIN", "0") == "1"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

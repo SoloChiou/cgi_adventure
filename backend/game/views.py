@@ -73,10 +73,15 @@ class LineLoginView(APIView):
         id_token = request.data.get("id_token", "")
         if not isinstance(id_token, str) or not id_token.strip():
             return Response({"detail": "缺少 LINE ID token。"}, status=status.HTTP_400_BAD_REQUEST)
-        if not settings.LINE_CHANNEL_ID:
+        context = request.data.get("channel_context", "mini_app")
+        if context not in ("mini_app", "web"):
+            return Response({"detail": "LINE 登入來源無效。"}, status=status.HTTP_400_BAD_REQUEST)
+        channel_ids = {"mini_app": settings.LINE_CHANNEL_ID, "web": settings.LINE_WEB_CHANNEL_ID}
+        channel_id = channel_ids[context]
+        if not channel_id:
             return Response({"detail": "LINE 登入尚未完成設定。"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         try:
-            identity = verify_line_id_token(id_token, settings.LINE_CHANNEL_ID)
+            identity = verify_line_id_token(id_token, channel_id)
             user = get_or_create_line_user(identity)
         except LineIdentityError:
             return Response({"detail": "LINE 登入憑證無效。"}, status=status.HTTP_400_BAD_REQUEST)
