@@ -52,6 +52,7 @@ class Job(SourcedContent):
         THIRD = 3, "第三階"
 
     name = models.CharField(max_length=50, unique=True)
+    name_en = models.CharField(max_length=80, blank=True)
     archetype = models.CharField(max_length=12, choices=Archetype.choices, default=Archetype.PHYSICAL)
     required_level = models.PositiveSmallIntegerField(default=1)
     tier = models.PositiveSmallIntegerField(choices=Tier.choices, default=Tier.STARTER)
@@ -64,10 +65,51 @@ class Job(SourcedContent):
     magic_defense_bonus = models.IntegerField(default=0)
     agility_bonus = models.IntegerField(default=0)
     critical_bonus = models.DecimalField(max_digits=4, decimal_places=3, default=0)
+    required_strength = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(99)])
+    required_intellect = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(99)])
+    required_piety = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(99)])
+    required_vitality = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(99)])
+    required_dexterity = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(99)])
+    required_speed = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(99)])
+    required_charisma = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(99)])
+    allowed_weapon_types = models.JSONField(default=list, blank=True)
     enabled = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(check=models.Q(required_strength__lte=99), name="job_required_strength_valid"),
+            models.CheckConstraint(check=models.Q(required_intellect__lte=99), name="job_required_intellect_valid"),
+            models.CheckConstraint(check=models.Q(required_piety__lte=99), name="job_required_piety_valid"),
+            models.CheckConstraint(check=models.Q(required_vitality__lte=99), name="job_required_vitality_valid"),
+            models.CheckConstraint(check=models.Q(required_dexterity__lte=99), name="job_required_dexterity_valid"),
+            models.CheckConstraint(check=models.Q(required_speed__lte=99), name="job_required_speed_valid"),
+            models.CheckConstraint(check=models.Q(required_charisma__lte=99), name="job_required_charisma_valid"),
+        ]
+
+
+class JobTitle(SourcedContent):
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="titles")
+    rank = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])
+    min_level = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(99)])
+    max_level = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(99)])
+    name = models.CharField(max_length=80)
+    name_en = models.CharField(max_length=120)
+
+    def __str__(self):
+        return f"{self.job.name} {self.rank}: {self.name}"
+
+    class Meta:
+        ordering = ["job_id", "rank"]
+        constraints = [
+            models.UniqueConstraint(fields=["job", "rank"], name="unique_job_title_rank"),
+            models.CheckConstraint(check=models.Q(rank__gte=1, rank__lte=7), name="job_title_rank_range"),
+            models.CheckConstraint(check=models.Q(min_level__gte=1, min_level__lte=99), name="job_title_min_level_range"),
+            models.CheckConstraint(check=models.Q(max_level__gte=1, max_level__lte=99), name="job_title_max_level_range"),
+            models.CheckConstraint(check=models.Q(max_level__gte=models.F("min_level")), name="job_title_level_order"),
+        ]
 
 
 class Skill(SourcedContent):
@@ -82,6 +124,7 @@ class Skill(SourcedContent):
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="skills")
     name = models.CharField(max_length=80, unique=True)
+    name_en = models.CharField(max_length=100, blank=True)
     priority = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])
     mp_cost = models.PositiveSmallIntegerField()
     damage_type = models.CharField(max_length=12, choices=DamageType.choices)
@@ -122,12 +165,30 @@ class Player(models.Model):
     magic_defense = models.PositiveIntegerField(default=2)
     agility = models.PositiveIntegerField(default=5)
     critical = models.DecimalField(max_digits=4, decimal_places=3, default=0, validators=[MinValueValidator(0), MaxValueValidator(0.5)])
+    strength = models.PositiveSmallIntegerField(default=9, validators=[MinValueValidator(1), MaxValueValidator(99)])
+    intellect = models.PositiveSmallIntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(99)])
+    piety = models.PositiveSmallIntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(99)])
+    vitality = models.PositiveSmallIntegerField(default=9, validators=[MinValueValidator(1), MaxValueValidator(99)])
+    dexterity = models.PositiveSmallIntegerField(default=9, validators=[MinValueValidator(1), MaxValueValidator(99)])
+    speed = models.PositiveSmallIntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(99)])
+    charisma = models.PositiveSmallIntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(99)])
     job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="players")
     job_count = models.PositiveSmallIntegerField(default=0)
     last_battle_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.name
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(check=models.Q(strength__gte=1, strength__lte=99), name="player_strength_range"),
+            models.CheckConstraint(check=models.Q(intellect__gte=1, intellect__lte=99), name="player_intellect_range"),
+            models.CheckConstraint(check=models.Q(piety__gte=1, piety__lte=99), name="player_piety_range"),
+            models.CheckConstraint(check=models.Q(vitality__gte=1, vitality__lte=99), name="player_vitality_range"),
+            models.CheckConstraint(check=models.Q(dexterity__gte=1, dexterity__lte=99), name="player_dexterity_range"),
+            models.CheckConstraint(check=models.Q(speed__gte=1, speed__lte=99), name="player_speed_range"),
+            models.CheckConstraint(check=models.Q(charisma__gte=1, charisma__lte=99), name="player_charisma_range"),
+        ]
 
 
 class Area(SourcedContent):

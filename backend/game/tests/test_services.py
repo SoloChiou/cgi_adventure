@@ -1,3 +1,4 @@
+import random
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -8,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from game.models import Area, AreaEncounter, BattleRecord, EquipmentSet, GameAccount, Item, Job, Monster, Player, PlayerItem, Skill
-from game.services import BattleCooldown, apply_job_transition, available_job_transitions, player_combat_unit, run_battle, scaled_monster_combat_unit, set_development_player_state
+from game.services import BattleCooldown, apply_job_transition, available_job_transitions, player_combat_unit, run_battle, scaled_monster_combat_unit, set_development_player_state, validate_initial_traits
 
 
 class BattleServiceTests(TestCase):
@@ -71,6 +72,15 @@ class BattleServiceTests(TestCase):
         sword = Item.objects.create(name="不存在背包的劍", item_type=Item.Type.WEAPON)
         EquipmentSet.objects.create(player=self.player, weapon=sword)
         with self.assertRaisesMessage(ValidationError, "角色未持有"):
+            run_battle(user=self.user, area_id=self.area.pk, seed=1)
+
+    def test_job_weapon_restriction_is_enforced(self):
+        self.player.job.allowed_weapon_types = ["劍"]
+        self.player.job.save(update_fields=["allowed_weapon_types"])
+        bow = Item.objects.create(name="測試弓", item_type=Item.Type.WEAPON, weapon_type="弓")
+        PlayerItem.objects.create(player=self.player, item=bow)
+        EquipmentSet.objects.create(player=self.player, weapon=bow)
+        with self.assertRaisesMessage(ValidationError, "不能使用"):
             run_battle(user=self.user, area_id=self.area.pk, seed=1)
 
     @override_settings(DEBUG=True)
@@ -140,20 +150,20 @@ class JobProgressionServiceTests(TestCase):
         apply_job_transition(self.player, self.first)
         self.player.refresh_from_db()
         self.assertEqual(self.player.level, 5)
-        self.assertEqual(self.player.max_hp, 60)
-        self.assertEqual(self.player.atk, 14)
-        self.assertEqual(self.player.agility, 3)
+        self.assertEqual(self.player.max_hp, 80)
+        self.assertEqual(self.player.atk, 22)
+        self.assertEqual(self.player.agility, 7)
         self.assertEqual(self.player.job_count, 1)
 
         self.player.level = 25
         self.player.save(update_fields=["level"])
         apply_job_transition(self.player, self.second)
         self.player.refresh_from_db()
-        self.assertEqual(self.player.max_hp, 85)
-        self.assertEqual(self.player.atk, 19)
+        self.assertEqual(self.player.max_hp, 205)
+        self.assertEqual(self.player.atk, 67)
         self.assertEqual(self.player.job_count, 2)
 
-    def test_transition_to_magical_job_converts_level_atk_growth_to_intelligence(self):
+    def test_transition_recalculates_both_attack_stats_from_traits(self):
         magical = Job.objects.create(
             name="方士", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter,
             intelligence_bonus=10, archetype=Job.Archetype.MAGICAL,
@@ -163,10 +173,10 @@ class JobProgressionServiceTests(TestCase):
         self.player.save(update_fields=["level", "atk"])
         apply_job_transition(self.player, magical)
         self.player.refresh_from_db()
-        self.assertEqual(self.player.atk, 8)
+        self.assertEqual(self.player.atk, 16)
         self.assertEqual(self.player.intelligence, 21)
 
-    def test_magical_job_gains_intelligence_on_level_up(self):
+    def test_level_up_recalculates_stats_from_level_and_traits(self):
         magical = Job.objects.create(name="法術職", tier=Job.Tier.FIRST, archetype=Job.Archetype.MAGICAL, intelligence_bonus=10)
         self.player.job = magical
         self.player.level = 1
@@ -175,9 +185,21 @@ class JobProgressionServiceTests(TestCase):
         self.player.exp = 100
         self.player.save(update_fields=["job", "level", "atk", "intelligence", "exp"])
         from game.services import _apply_level_ups
-        _apply_level_ups(self.player)
-        self.assertEqual(self.player.intelligence, 5)
-        self.assertEqual(self.player.atk, 8)
+        _apply_level_ups(self.player, random.Random(0))
+        self.assertEqual(self.player.intelligence, 15)
+        self.assertEqual(self.player.atk, 10)
+
+    def test_level_up_trait_growth_is_reproducible(self):
+        self.player.level = 1
+        self.player.exp = 100
+        self.player.save(update_fields=["level", "exp"])
+        from game.services import _apply_level_ups
+        _apply_level_ups(self.player, random.Random(1))
+        self.assertEqual(self.player.strength, 10)
+        self.assertEqual(
+            [self.player.intellect, self.player.piety, self.player.vitality, self.player.dexterity, self.player.speed, self.player.charisma],
+            [8, 8, 9, 9, 8, 8],
+        )
 
     def test_transition_rejects_wrong_route(self):
         other = Job.objects.create(name="飛燕劍客", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter)
@@ -190,6 +212,21 @@ class JobProgressionServiceTests(TestCase):
         self.player.level = 4
         self.assertFalse(available_job_transitions(self.player).exists())
 
+    def test_available_transitions_respect_trait_requirements(self):
+        self.first.required_strength = 12
+        self.first.save(update_fields=["required_strength"])
+        self.assertFalse(available_job_transitions(self.player).exists())
+        self.player.strength = 12
+        self.player.save(update_fields=["strength"])
+        self.assertEqual(list(available_job_transitions(self.player)), [self.first])
+
+    def test_initial_traits_require_exactly_ten_points(self):
+        traits = {"strength": 12, "intellect": 8, "piety": 8, "vitality": 16, "dexterity": 9, "speed": 8, "charisma": 8}
+        self.assertEqual(validate_initial_traits(traits), traits)
+        traits["vitality"] = 15
+        with self.assertRaisesMessage(ValidationError, "正好分配 10 點"):
+            validate_initial_traits(traits)
+
     def test_development_level_adjustment_applies_each_level_growth(self):
         set_development_player_state(
             self.player,
@@ -199,11 +236,11 @@ class JobProgressionServiceTests(TestCase):
         )
         self.player.refresh_from_db()
         self.assertEqual(self.player.level, 10)
-        self.assertEqual(self.player.max_hp, 55)
-        self.assertEqual(self.player.max_mp, 20)
-        self.assertEqual(self.player.atk, 18)
-        self.assertEqual(self.player.defense, 8)
-        self.assertEqual(self.player.agility, 10)
+        self.assertEqual(self.player.max_hp, 75)
+        self.assertEqual(self.player.max_mp, 28)
+        self.assertEqual(self.player.atk, 26)
+        self.assertEqual(self.player.defense, 12)
+        self.assertEqual(self.player.agility, 14)
         self.assertEqual(self.player.hp, 20)
 
     def test_development_job_change_replaces_bonus_and_sets_hp(self):
@@ -215,8 +252,8 @@ class JobProgressionServiceTests(TestCase):
         )
         self.player.refresh_from_db()
         self.assertEqual(self.player.job, self.first)
-        self.assertEqual(self.player.max_hp, 60)
-        self.assertEqual(self.player.atk, 14)
+        self.assertEqual(self.player.max_hp, 80)
+        self.assertEqual(self.player.atk, 22)
         self.assertEqual(self.player.hp, 40)
         self.assertEqual(self.player.job_count, 1)
 
@@ -228,6 +265,16 @@ class JobProgressionServiceTests(TestCase):
                 target_job=self.starter,
                 target_hp=999,
             )
+
+    def test_development_level_must_be_between_one_and_ninety_nine(self):
+        for target_level in (0, 100):
+            with self.subTest(target_level=target_level), self.assertRaisesMessage(ValidationError, "1 至 99"):
+                set_development_player_state(
+                    self.player,
+                    target_level=target_level,
+                    target_job=self.starter,
+                    target_hp=self.player.hp,
+                )
 
 
 class JobSkillAssignmentServiceTests(TestCase):

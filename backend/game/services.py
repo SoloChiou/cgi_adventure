@@ -2,6 +2,7 @@ import random
 import secrets
 from dataclasses import asdict
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -35,15 +36,10 @@ class BattleCooldown(ValidationError):
     pass
 
 
-LEVEL_STAT_GROWTH = {
-    "max_hp": 5,
-    "max_mp": 2,
-    "atk": 2,
-    "defense": 1,
-    "agility": 1,
-}
-BASE_ATK = 8
-BASE_INTELLIGENCE = 3
+TRAIT_FIELDS = ("strength", "intellect", "piety", "vitality", "dexterity", "speed", "charisma")
+TRAIT_GROWTH_RATE = 0.20
+INITIAL_TRAITS = {"strength": 9, "intellect": 8, "piety": 8, "vitality": 9, "dexterity": 9, "speed": 8, "charisma": 8}
+INITIAL_BONUS_POINTS = 10
 
 
 def available_job_transitions(player):
@@ -54,7 +50,37 @@ def available_job_transitions(player):
         prerequisite_job=player.job,
         tier=player.job.tier + 1,
         required_level__lte=player.level,
+        required_strength__lte=player.strength,
+        required_intellect__lte=player.intellect,
+        required_piety__lte=player.piety,
+        required_vitality__lte=player.vitality,
+        required_dexterity__lte=player.dexterity,
+        required_speed__lte=player.speed,
+        required_charisma__lte=player.charisma,
     ).order_by("id")
+
+
+def validate_initial_traits(traits):
+    normalized = {}
+    for field in TRAIT_FIELDS:
+        try:
+            value = int(traits[field])
+        except (KeyError, TypeError, ValueError):
+            raise ValidationError("必須提供完整的七種角色特性。")
+        base = INITIAL_TRAITS[field]
+        if value < base or value > 18:
+            raise ValidationError("初始角色特性不得低於基礎值或高於 18。")
+        normalized[field] = value
+    spent = sum(normalized[field] - INITIAL_TRAITS[field] for field in TRAIT_FIELDS)
+    if spent != INITIAL_BONUS_POINTS:
+        raise ValidationError("初始角色必須正好分配 10 點特性點數。")
+    if max(normalized.values()) < 12:
+        raise ValidationError("至少一項初始角色特性必須達到 12。")
+    return normalized
+
+
+def job_requirements_met(job, traits):
+    return all(traits[field] >= getattr(job, "required_{}".format(field)) for field in TRAIT_FIELDS)
 
 
 def apply_job_transition(player, target_job):
@@ -62,7 +88,10 @@ def apply_job_transition(player, target_job):
         raise ValidationError("不能跳階或轉入其他職業路線。")
     if target_job.tier != player.job.tier + 1 or player.level < target_job.required_level:
         raise ValidationError("目前尚未符合轉職條件。")
-    _replace_job_bonus(player, target_job)
+    if not job_requirements_met(target_job, {field: getattr(player, field) for field in TRAIT_FIELDS}):
+        raise ValidationError("角色特性尚未符合此職業門檻。")
+    player.job = target_job
+    recalculate_player_stats(player)
     player.job_count += 1
     player.hp = player.max_hp
     player.mp = player.max_mp
@@ -70,49 +99,35 @@ def apply_job_transition(player, target_job):
     return player
 
 
-def _replace_job_bonus(player, target_job):
-    old_job = player.job
-    if old_job.archetype != target_job.archetype:
-        _convert_level_attack_growth(player, old_job, target_job)
-    for player_field, job_field in (
-        ("max_hp", "max_hp_bonus"),
-        ("max_mp", "max_mp_bonus"),
-        ("atk", "atk_bonus"),
-        ("defense", "defense_bonus"),
-        ("intelligence", "intelligence_bonus"),
-        ("magic_defense", "magic_defense_bonus"),
-        ("agility", "agility_bonus"),
-        ("critical", "critical_bonus"),
-    ):
-        value = getattr(player, player_field) - getattr(old_job, job_field) + getattr(target_job, job_field)
-        setattr(player, player_field, value)
-    player.job = target_job
+def recalculate_player_stats(player):
+    """Rebuild persisted combat stats from authoritative level, traits, and job."""
+    job = player.job
+    player.max_hp = max(1, 5 * player.level + player.vitality + 16 + job.max_hp_bonus)
+    player.max_mp = max(1, 2 * player.level + (player.intellect + player.piety) // 2 + job.max_mp_bonus)
+    player.atk = max(0, 2 * player.level + player.strength - 3 + job.atk_bonus)
+    player.defense = max(0, player.level + player.vitality // 4 + job.defense_bonus)
+    player.intelligence = max(0, 2 * player.level + player.intellect - 7 + job.intelligence_bonus)
+    player.magic_defense = max(0, (player.piety + player.charisma) // 8 + job.magic_defense_bonus)
+    player.agility = max(0, player.level + (player.speed + player.dexterity) // 4 + job.agility_bonus)
+    trait_critical = Decimal(max(0, player.dexterity + player.charisma - 17)) / Decimal("100")
+    player.critical = min(Decimal("0.500"), trait_critical + job.critical_bonus)
+    player.hp = min(player.hp, player.max_hp)
+    player.mp = min(player.mp, player.max_mp)
+    return player
 
 
-def _convert_level_attack_growth(player, old_job, target_job):
-    if old_job.archetype == target_job.archetype:
-        return
-    if old_job.archetype == Job.Archetype.PHYSICAL and target_job.archetype == Job.Archetype.MAGICAL:
-        growth = max(0, player.atk - BASE_ATK - old_job.atk_bonus)
-        player.atk -= growth
-        player.intelligence += growth
-    elif old_job.archetype == Job.Archetype.MAGICAL and target_job.archetype == Job.Archetype.PHYSICAL:
-        growth = max(0, player.intelligence - BASE_INTELLIGENCE - old_job.intelligence_bonus)
-        player.intelligence -= growth
-        player.atk += growth
-
-
-def set_development_player_state(player, *, target_level, target_job, target_hp):
-    level_delta = target_level - player.level
-    growth_fields = dict(LEVEL_STAT_GROWTH)
-    if target_job.archetype == Job.Archetype.MAGICAL:
-        growth_fields.pop("atk")
-        growth_fields["intelligence"] = 2
-    for field, growth in growth_fields.items():
-        setattr(player, field, max(1, getattr(player, field) + level_delta * growth))
+def set_development_player_state(player, *, target_level, target_job, target_hp, traits=None):
+    if not 1 <= target_level <= 99:
+        raise ValidationError("等級必須介於 1 至 99。")
+    traits = traits or {field: getattr(player, field) for field in TRAIT_FIELDS}
+    for field in TRAIT_FIELDS:
+        value = traits[field]
+        if not 1 <= value <= 99:
+            raise ValidationError("角色特性必須介於 1 至 99。")
+        setattr(player, field, value)
     player.level = target_level
-    if target_job.pk != player.job_id:
-        _replace_job_bonus(player, target_job)
+    player.job = target_job
+    recalculate_player_stats(player)
     if target_hp > player.max_hp:
         raise ValidationError("目前 HP 不得超過調整後的 MaxHP。")
     player.hp = target_hp
@@ -152,6 +167,8 @@ def _validate_equipment(player):
             continue
         if item.item_type != expected_type:
             raise ValidationError("目前裝備欄位包含不合法物品。")
+        if field == "weapon" and player.job.allowed_weapon_types and item.weapon_type not in player.job.allowed_weapon_types:
+            raise ValidationError("目前職業不能使用此武器類型。")
         if not PlayerItem.objects.filter(player=player, item=item, quantity__gt=0).exists():
             raise ValidationError("目前裝備包含角色未持有的物品。")
 
@@ -212,19 +229,17 @@ def choose_monster(area, rng):
     return rng.choices([entry.monster for entry in encounters], weights=[entry.weight for entry in encounters], k=1)[0]
 
 
-def _apply_level_ups(player):
+def _apply_level_ups(player, rng=None):
+    rng = rng or random
     levels = []
     while player.level < 99 and player.exp >= exp_to_next_level(player.level):
         player.level += 1
-        growth_fields = LEVEL_STAT_GROWTH
-        if player.job.archetype == Job.Archetype.MAGICAL:
-            growth_fields = {**LEVEL_STAT_GROWTH, "atk": 0, "intelligence": 2}
-        for field, growth in growth_fields.items():
-            if not growth:
-                continue
-            setattr(player, field, getattr(player, field) + growth)
+        for field in TRAIT_FIELDS:
+            if getattr(player, field) < 99 and rng.random() < TRAIT_GROWTH_RATE:
+                setattr(player, field, getattr(player, field) + 1)
         levels.append(player.level)
     if levels:
+        recalculate_player_stats(player)
         player.hp = player.max_hp
         player.mp = player.max_mp
     return levels
@@ -256,7 +271,7 @@ def _apply_rewards(player, monster, rng):
         row.exp = F("exp") + 1
         row.save(update_fields=["exp"])
         proficiency = {"weapon_type": weapon.weapon_type, "exp": 1}
-    level_ups = _apply_level_ups(player)
+    level_ups = _apply_level_ups(player, rng)
     return {"exp": monster.exp_reward, "gold": gold, "drops": drops, "proficiency": proficiency, "level_ups": level_ups}
 
 

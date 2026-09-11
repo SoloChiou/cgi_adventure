@@ -32,8 +32,8 @@ services:
       DEBUG: ${DEBUG:-True}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
       FRONTEND_URL: http://localhost:5173
-      CORS_ALLOWED_ORIGINS: http://localhost:5173
-      CSRF_TRUSTED_ORIGINS: http://localhost:5173
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      CSRF_TRUSTED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       ENABLE_DEV_LOGIN: ${ENABLE_DEV_LOGIN:-1}
       DEV_ADMIN_USERNAME: ${DEV_ADMIN_USERNAME:?請在 .env 設定 DEV_ADMIN_USERNAME}
       DEV_ADMIN_PASSWORD: ${DEV_ADMIN_PASSWORD:?請在 .env 設定 DEV_ADMIN_PASSWORD}

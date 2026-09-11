@@ -95,7 +95,198 @@
    └─ 限制：不發放獎勵，不作為正式內容量或世界觀來源
 ```
 
-## 5. 三階職業樹
+## 5. FF Adventure 型職業內容方向
+
+FF Adventure 提供多職業、七種特性門檻與職業內七階稱號的結構參考；本專案不直接使用其日文職業名稱、必殺技名稱或 Final Fantasy 相關素材。正式內容以中國鬼怪文學與原創志怪框架重新命名，實際規則與數值仍須在 `PROJECT_SPEC.md` 逐項定案。
+
+```text
+十四職業正式架構方向
+├─ 1. 武者
+│  ├─ 結構參考：Fighter
+│  ├─ 英文名稱：Warrior
+│  ├─ 定位：力量導向的正面物理戰鬥
+│  ├─ 代表技能：破邪斬｜Evil-Rending Slash
+│  ├─ 武器：刀、劍、槍
+│  └─ 類型：原創；採中國武人與遊俠意象
+│
+├─ 2. 方士
+│  ├─ 結構參考：Mage
+│  ├─ 英文名稱：Mystic
+│  ├─ 定位：智識導向的符法與五行攻擊
+│  ├─ 代表技能：五行符｜Five Elements Talisman
+│  ├─ 武器：法劍、法杖、符器
+│  └─ 類型：改編；採中國方術與志怪術士意象
+│
+├─ 3. 祝由師
+│  ├─ 結構參考：Priest
+│  ├─ 英文名稱：Ritual Healer
+│  ├─ 定位：信念導向的治療、祓除與護持
+│  ├─ 代表技能：祝由祓煞｜Ritual Banishment
+│  ├─ 武器：法杖、符器
+│  └─ 類型：改編；名稱取自傳統祝由意象，能力為遊戲化設計
+│
+├─ 4. 夜行客
+│  ├─ 結構參考：Thief
+│  ├─ 英文名稱：Night Rogue
+│  ├─ 定位：靈巧、速度與奇襲
+│  ├─ 代表技能：夜襲｜Night Assault
+│  ├─ 武器：短刃、劍
+│  └─ 類型：原創；採夜行與江湖奇人意象
+│
+├─ 5. 山林獵手
+│  ├─ 結構參考：Ranger
+│  ├─ 英文名稱：Wilds Hunter
+│  ├─ 定位：均衡探索、遠程武器與妖物追蹤
+│  ├─ 代表技能：伏妖箭｜Demon-Subduing Arrow
+│  ├─ 武器：弓、弩、刀
+│  └─ 類型：原創；採山野獵戶與志怪旅途意象
+│
+├─ 6. 丹師
+│  ├─ 結構參考：Alchemist
+│  ├─ 英文名稱：Alchemist
+│  ├─ 定位：智識與靈巧導向的丹藥、器物與變化
+│  ├─ 代表技能：丹火化形｜Elixir Flame Transmutation
+│  ├─ 武器：法杖、符器
+│  └─ 類型：改編；採煉丹與方術意象，不對應特定宗派
+│
+├─ 7. 樂師
+│  ├─ 結構參考：Bard
+│  ├─ 英文名稱：Minstrel
+│  ├─ 定位：音律、魅力與輔助效果
+│  ├─ 代表技能：清商鎮魂｜Pure Melody Soulward
+│  ├─ 武器：樂器、短刃
+│  └─ 類型：原創；採古代樂師與志怪音律意象
+│
+├─ 8. 通靈者
+│  ├─ 結構參考：Psionic
+│  ├─ 英文名稱：Spirit Medium
+│  ├─ 定位：智識、生命與魅力導向的神念能力
+│  ├─ 代表技能：通幽神念｜Netherworld Communion
+│  ├─ 武器：法杖、符器
+│  └─ 類型：原創；採感應鬼神與通幽意象
+│
+├─ 9. 神女
+│  ├─ 結構參考：Valkyrie
+│  ├─ 英文名稱：Divine Maiden
+│  ├─ 定位：力量、信念、生命與速度兼具的戰鬥者
+│  ├─ 代表技能：神女降魔｜Divine Demonfall
+│  ├─ 武器：槍、劍
+│  └─ 類型：原創；使用泛稱，不對應特定神祇或原典人物
+│
+├─ 10. 法主
+│  ├─ 結構參考：Bishop
+│  ├─ 英文名稱：Arcane Hierophant
+│  ├─ 定位：高智識與高信念的術法領袖
+│  ├─ 代表技能：萬法歸一｜Convergence of All Arts
+│  ├─ 武器：法杖、法劍
+│  └─ 類型：原創；避免對應現實宗教職位
+│
+├─ 11. 仙門宗主
+│  ├─ 結構參考：Lord
+│  ├─ 英文名稱：Immortal Sect Master
+│  ├─ 定位：高門檻的全能領袖
+│  ├─ 代表技能：仙門敕令｜Immortal Sect Edict
+│  ├─ 武器：劍、法劍
+│  └─ 類型：原創；採仙門與宗派領袖意象
+│
+├─ 12. 劍客
+│  ├─ 結構參考：Samurai
+│  ├─ 英文名稱：Swordmaster
+│  ├─ 定位：力量、靈巧與速度導向的武器專家
+│  ├─ 代表技能：御劍疾斬｜Swift Flying Sword
+│  ├─ 武器：劍
+│  └─ 類型：原創；改用中國劍俠意象，不沿用日本武士文化設定
+│
+├─ 13. 行者
+│  ├─ 結構參考：Monk
+│  ├─ 英文名稱：Ascetic
+│  ├─ 定位：力量、信念與速度導向的徒手修行者
+│  ├─ 代表技能：金剛伏魔｜Vajra Demon Subdual
+│  ├─ 武器：拳套、棍
+│  └─ 類型：原創；採雲遊修行者意象，不對應特定宗教人物
+│
+└─ 14. 影衛
+   ├─ 結構參考：Ninja
+   ├─ 英文名稱：Shadow Guard
+   ├─ 定位：多能力門檻的高階隱密戰鬥者
+   ├─ 代表技能：無影絕殺｜Shadowless Execution
+   ├─ 武器：短刃、劍
+   └─ 類型：原創；改用中國志怪與江湖中的影衛意象
+```
+
+```text
+七種角色特性內容方向
+├─ 膂力｜Strength：武器力量、負重與正面攻擊的角色素質
+│
+├─ 悟性｜Intelligence：術法理解、策略與法術威力的角色素質
+│
+├─ 信念｜Piety：祓除、護持、治療與精神抗性的角色素質
+│
+├─ 根骨｜Vitality：生命、耐力與承受傷害的角色素質
+│
+├─ 巧手｜Dexterity：武器控制、製作、命中與細緻操作的角色素質
+│
+├─ 身法｜Agility：行動順序、閃避與速度的角色素質
+│
+└─ 氣度｜Charisma：御靈、音律、交涉與領袖能力的角色素質
+```
+
+```text
+職業內七階稱號
+├─ 結構與作用
+│  ├─ 等級區間依序為 Lv.1–6、7–13、14–20、21–27、28–34、35–41、42–99
+│  ├─ 同一職業依角色等級顯示唯一稱號
+│  ├─ 稱號不等同於轉職，不另外重設角色狀態
+│  └─ 第一版只用於角色資料與排行榜顯示，不提供解鎖或能力效果
+│
+├─ 武者／Warrior
+│  └─ 習武人／Martial Initiate → 持刃士／Blade Bearer → 破陣武士／Linebreaker → 鎮關豪傑／Pass Warden → 伏妖戰將／Demonbane General → 百戰宗師／Master of a Hundred Battles → 蕩魔武聖／Demon-Quelling War Saint
+│
+├─ 方士／Mystic
+│  └─ 習符童／Talisman Novice → 行法士／Rite Adept → 五行術者／Fivefold Caster → 役鬼方士／Spirit Binder → 玄壇法師／Arcane Altar Master → 通天真人／Heaven-Reaching Sage → 乾坤道宗／Sovereign of Heaven and Earth
+│
+├─ 祝由師／Ritual Healer
+│  └─ 習祝者／Ritual Novice → 安魂使／Soul Soother → 禳災師／Calamity Averter → 護命祝官／Life-Warding Ritualist → 百病祓師／Master of Banishment → 回春聖手／Sage of Renewal → 濟世祝宗／Grand Ritual Healer
+│
+├─ 夜行客／Night Rogue
+│  └─ 探夜人／Night Scout → 潛蹤客／Veiled Strider → 飛簷手／Rooftop Runner → 無聲刺客／Silent Assassin → 逐影豪俠／Shadow Chaser → 幽都夜使／Nocturne Envoy → 萬影魁首／Sovereign of Shadows
+│
+├─ 山林獵手／Wilds Hunter
+│  └─ 尋跡人／Trail Seeker → 山徑斥候／Mountain Scout → 伏妖弓手／Demonstalker Archer → 百獸獵師／Beastwise Hunter → 荒野巡狩／Warden of the Wilds → 群山守望／Sentinel of the Peaks → 萬嶺獵宗／Master of Ten Thousand Ridges
+│
+├─ 丹師／Alchemist
+│  └─ 採藥童／Herb Gatherer → 煉火徒／Crucible Adept → 調鼎師／Cauldron Crafter → 百草丹師／Elixir Herbalist → 玄爐妙手／Mystic Crucible Master → 九轉丹宗／Master of Ninefold Elixirs → 造化藥君／Lord of Transmutation
+│
+├─ 樂師／Minstrel
+│  └─ 習律人／Melody Novice → 清音客／Pure-Tone Minstrel → 鎮魂樂師／Soulward Musician → 幽弦妙手／Master of Phantom Strings → 百曲宗匠／Virtuoso of a Hundred Songs → 天籟樂聖／Sage of Celestial Harmony → 萬靈知音／Voice of All Spirits
+│
+├─ 通靈者／Spirit Medium
+│  └─ 感靈人／Spirit Sensitive → 問魂使／Soul Inquirer → 通幽客／Netherworld Seer → 御念師／Mindweaver → 萬象靈媒／Medium of Myriad Forms → 陰陽先知／Oracle Between Realms → 太虛通靈聖／Sage of the Great Void
+│
+├─ 神女／Divine Maiden
+│  └─ 奉燈女／Lamp Bearer → 護祠使／Shrine Warden → 玄甲神女／Mystic-Armed Maiden → 逐邪戰姬／Bane-Chasing Champion → 天門女將／General of the Heavenly Gate → 九霄英靈／Heroine of the Nine Heavens → 鎮世神姬／World-Warding Divine Maiden
+│
+├─ 法主／Arcane Hierophant
+│  └─ 研法者／Arcane Scholar → 講法師／Doctrine Keeper → 掌壇使／Altar Custodian → 統法尊者／Exalted Arcanist → 萬法宗師／Master of Myriad Arts → 天章法主／Hierophant of the Celestial Canon → 玄穹聖宗／Sovereign of the Mystic Firmament
+│
+├─ 仙門宗主／Immortal Sect Master
+│  └─ 外門執事／Outer Court Steward → 內門護法／Inner Court Guardian → 傳功長老／Teaching Hall Elder → 一峰之主／Master of One Peak → 仙門掌教／Head of the Immortal Sect → 群仙盟主／Lord of the Immortal Alliance → 萬宗共主／Sovereign of Ten Thousand Sects
+│
+├─ 劍客／Swordmaster
+│  └─ 試劍人／Sword Aspirant → 行劍客／Wandering Swordsman → 疾風劍士／Gale Swordsman → 御劍名家／Flying Sword Adept → 斬妖劍豪／Demon-Slaying Swordmaster → 凌霄劍宗／Sky-Piercing Sword Sage → 一劍天尊／Celestial Sword Sovereign
+│
+├─ 行者／Ascetic
+│  └─ 苦行人／Wayfaring Ascetic → 鍛體者／Body-Tempering Adept → 伏魔行者／Demon-Subduing Pilgrim → 金身護法／Golden-Body Guardian → 無畏尊者／Fearless Venerable → 明心大師／Master of the Clear Mind → 渡世聖行／World-Crossing Sage
+│
+└─ 影衛／Shadow Guard
+   └─ 候影人／Shadow Watcher → 潛行衛／Veiled Guard → 無聲刃／Silent Blade → 夜幕使／Envoy of Night → 千面影衛／Thousand-Faced Guard → 無形統領／Commander Unseen → 幽影至尊／Sovereign of Hidden Shadows
+```
+
+上述十四個職業與九十八個稱號的繁體中文及英文名稱已確定為正式內容。七階結構參考 FF Adventure，但所有稱號均依中國志怪與武俠題材原創，不直接複製其 Class Title、日文內容、原始文字或素材。規則以 `PROJECT_SPEC.md` 為準並由 `seed_game` 保存；重複轉職結果仍依 `FFADVENTURE_ADOPTION_PLAN.md` 的後續階段逐項定案。
+
+## 6. 已停用三階職業歷史
+
+本節只記錄第 3 項導入前的職業內容與遷移依據，不再是 Runtime 正式內容。十四職業完成資料遷移後，舊職業只保留停用資料供歷史追溯；本節於第 13 項清理舊規格時移除。
 
 ```text
 三階職業配置
@@ -131,7 +322,7 @@
 
 御靈師第一階只使用靈狐襲與紙將衝陣；靈體只作為技能演出與傷害來源，不建立獨立戰鬥單位。四個第一階職業以同裝備等級下整體勝率接近為初版目標，但保留對不同敵人類型的相剋差異。
 
-### 5.1 轉職文案語氣與意象
+### 6.1 轉職文案語氣與意象
 
 轉職文案採用荒誕武俠喜劇語氣：以一本正經的修行敘述搭配突兀、生活化的比喻，讓角色成長具備戲劇感與反差幽默。風格參考香港武俠喜劇的節奏與誇張感，但所有句子均為本作原創，不直接引用電影台詞或重現特定角色對白。文案的功能是降低職業選擇的生硬感，同時讓玩家在閱讀笑點時立即辨識各職業的戰鬥定位。
 
@@ -172,7 +363,7 @@
 └─ 乾坤天師：新增八卦鏡與天師系飾品；使用乾坤雷劫、天罡鎮煞、乾坤法印
 ```
 
-## 6. 後續內容方向
+## 7. 後續內容方向
 
 ```text
 內容擴充順序
@@ -191,7 +382,7 @@
 
 以上僅定義內容方向，不代表已核准具體角色、怪物、職業、技能或數值。新增內容仍須遵守 MVP 範圍，不因題材規劃提前建立尚未需要的系統。
 
-## 7. 尚待決策
+## 8. 尚待決策
 
 ```text
 內容待決策事項

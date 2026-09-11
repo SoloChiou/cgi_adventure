@@ -1,0 +1,26 @@
+FF Adventure 參考資料
+├─ 1. 來源
+│  ├─ Repository：https://github.com/timomo/ffadventure.git
+│  ├─ Commit：f0134151d86f9da1eefdfb26dba0d3a7d9165732
+│  └─ 保存日期：2026-09-11
+│
+├─ 2. 保存範圍
+│  ├─ reference/ffadventure 只保存該 Commit 的全部 Git 已追蹤檔案
+│  └─ 不保存 .git、遠端設定、分支或本機執行資料
+│
+├─ 3. 用途
+│  ├─ 參考復古 CGI 遊戲的頁面資訊架構
+│  ├─ 參考戰鬥雙方狀態、逐回合紀錄及結算的呈現順序
+│  └─ 不作為 CGI Adventure 的 Runtime Dependency
+│
+├─ 4. 工程邊界
+│  ├─ 不執行 reference/ffadventure 內的 Perl CGI
+│  ├─ 不引用其戰鬥公式、資料寫入、認證或檔案鎖流程
+│  ├─ CGI Adventure 的遊戲規則仍以 PROJECT_SPEC.md 為準
+│  └─ CGI Adventure 的 Backend 仍是所有遊戲結果的權威來源
+│
+└─ 5. 授權注意事項
+   ├─ 原始 Repository 沒有標準 LICENSE 檔
+   ├─ 使用與修改條款記錄於 reference/ffadventure/readme.txt
+   ├─ 原作者未放棄著作權，修改與再散布另有署名及通知要求
+   └─ 未確認授權前，不直接複製原始碼、文字或圖片至產品功能

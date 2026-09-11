@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 
-from game.models import Area, AreaEncounter, DropEntry, Item, Job, Monster, Skill
+from game.models import Area, AreaEncounter, DropEntry, GameAccount, Item, Job, JobTitle, Monster, Player, Skill
 
 
 class SeedGameTests(TestCase):
@@ -11,17 +11,19 @@ class SeedGameTests(TestCase):
         call_command("seed_game", verbosity=0)
 
         self.assertEqual(Job.objects.filter(name="遊方客").count(), 1)
-        self.assertEqual(Job.objects.count(), 13)
-        self.assertEqual(Job.objects.get(name="金剛力士").prerequisite_job.name, "遊方客")
-        self.assertEqual(Job.objects.get(name="護法金剛").max_hp_bonus, 55)
-        self.assertEqual(Job.objects.get(name="鎮獄神將").tier, Job.Tier.THIRD)
-        self.assertEqual(Skill.objects.count(), 35)
-        self.assertEqual(Job.objects.get(name="乾坤天師").skills.count(), 3)
-        self.assertEqual(Skill.objects.get(name="天罡鎮煞").condition, Skill.Condition.SELF_HP_LOW)
-        self.assertEqual(
-            list(Job.objects.get(name="乾坤天師").skills.values_list("name", "priority")),
-            [("乾坤雷劫", 1), ("天罡鎮煞", 2), ("乾坤法印", 3)],
-        )
+        self.assertEqual(Job.objects.count(), 15)
+        self.assertEqual(Job.objects.filter(enabled=True, tier=Job.Tier.FIRST).count(), 14)
+        self.assertEqual(Job.objects.get(name="武者").required_strength, 12)
+        self.assertEqual(Job.objects.get(name="通靈者").required_intellect, 14)
+        self.assertEqual(Job.objects.get(name="影衛").required_speed, 12)
+        self.assertEqual(Job.objects.get(name="劍客").allowed_weapon_types, ["劍"])
+        self.assertEqual(JobTitle.objects.count(), 98)
+        warrior_titles = list(JobTitle.objects.filter(job__name="武者").values_list("rank", "min_level", "max_level", "name", "name_en"))
+        self.assertEqual(warrior_titles[0], (1, 1, 6, "習武人", "Martial Initiate"))
+        self.assertEqual(warrior_titles[-1], (7, 42, 99, "蕩魔武聖", "Demon-Quelling War Saint"))
+        self.assertEqual(Skill.objects.filter(enabled=True).count(), 14)
+        self.assertEqual(Job.objects.get(name="法主").skills.get(enabled=True).name, "萬法歸一")
+        self.assertEqual(Skill.objects.get(name="萬法歸一").name_en, "Convergence of All Arts")
         area = Area.objects.get(name="蘭若古道")
         self.assertEqual(area.source_work, "《聊齋志異》")
         self.assertEqual(area.adaptation_type, Area.AdaptationType.ADAPTED)
@@ -43,6 +45,18 @@ class SeedGameTests(TestCase):
         self.assertEqual(painted_skin.source_reference, "〈畫皮〉")
         self.assertEqual(painted_skin.adaptation_type, Monster.AdaptationType.ADAPTED)
         self.assertTrue(painted_skin.lore_note)
+
+    def test_seed_game_maps_legacy_spirit_job_to_spirit_medium(self):
+        legacy = Job.objects.create(name="御靈師", tier=Job.Tier.FIRST)
+        user = get_user_model().objects.create_user(username="legacy-player")
+        player = Player.objects.create(account=GameAccount.objects.create(user=user), name="舊角色", job=legacy)
+
+        call_command("seed_game", verbosity=0)
+
+        player.refresh_from_db()
+        legacy.refresh_from_db()
+        self.assertEqual(player.job.name, "通靈者")
+        self.assertFalse(legacy.enabled)
 
 
 

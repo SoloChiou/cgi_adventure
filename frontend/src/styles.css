@@ -1,10 +1,10 @@
 :root { font-family: ui-monospace, "Noto Sans TC", monospace; color: #e9dfc7; background: #130f0a; font-synthesis: none; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at top, #332718, #130f0a 55%); }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { color: #f3e4bd; background: #342719; border: 1px solid #8c7046; padding: .7rem 1rem; cursor: pointer; }
 button:disabled { opacity: .4; cursor: not-allowed; }
-.app { width: min(760px, 100%); min-height: 100vh; margin: auto; padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom)); }
+.app { width: min(1180px, 100%); min-height: 100vh; margin: auto; padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom)); }
 .center { min-height: 100vh; display: grid; place-content: center; text-align: center; padding: 2rem; }
 header, article, nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .header_actions { display: flex; align-items: center; gap: .5rem; }
@@ -18,8 +18,70 @@ section h2 { margin-top: 0; color: #d8b970; }
 article { border-top: 1px dashed #5b4930; padding: 1rem 0; }
 article:first-of-type { border-top: 0; }
 article p { margin: .35rem 0; color: #c6baa2; }
-input { width: 100%; color: #f2ead9; background: #0d0a07; border: 1px solid #705a39; padding: .8rem; margin-bottom: .75rem; }
+input, select { width: 100%; color: #f2ead9; background: #0d0a07; border: 1px solid #705a39; padding: .8rem; margin-bottom: .75rem; }
+.creation_traits { display: grid; grid-template-columns: repeat(4, 1fr); gap: .65rem; margin-top: .75rem; }
+.creation_traits label span { display: block; margin-bottom: .3rem; color: #d8b970; }
 .error { color: #ff9d87; }
 .quiet { background: transparent; border-color: #5b4930; }
 .battle-line { padding-left: .5rem; border-left: 2px solid #705a39; }
-@media (max-width: 520px) { article { align-items: flex-start; } header h1 { font-size: 1.2rem; } }
+.game_dashboard { display: grid; grid-template-columns: minmax(380px, .85fr) minmax(480px, 1.15fr); align-items: start; gap: 1rem; }
+.game_dashboard section { margin: 0 0 1rem; padding: 0; overflow: hidden; }
+.panel_title { min-height: 2.6rem; display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .45rem .75rem; background: #342719; border-bottom: 1px solid #8c7046; }
+.panel_title h2 { margin: 0; font-size: 1rem; letter-spacing: .04em; }
+.compact_button { padding: .35rem .65rem; }
+.status_actions { display: flex; gap: .4rem; }
+.character_content { display: grid; grid-template-columns: minmax(150px, 38%) 1fr; min-width: 0; }
+.portrait_column { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #5b4930; }
+.portrait_placeholder { flex: 1; min-height: 220px; background: rgba(13, 10, 7, .45); border-bottom: 1px solid #5b4930; }
+.equipment_table > div, .record_table > div { display: grid; grid-template-columns: 5.5rem 1fr; min-height: 2.5rem; border-top: 1px solid #5b4930; }
+.equipment_table > div:first-child, .record_table > div:first-child { border-top: 0; }
+.equipment_table span, .record_table strong { display: flex; align-items: center; padding: .45rem .55rem; color: #d8b970; background: #2b2117; border-right: 1px solid #5b4930; }
+.equipment_table strong, .record_table span { display: flex; align-items: center; padding: .45rem .55rem; font-weight: 400; overflow-wrap: anywhere; }
+.character_stats { display: grid; grid-template-columns: 1fr 1fr; align-content: start; min-width: 0; }
+.stat_row { display: grid; grid-template-columns: minmax(4.25rem, auto) minmax(0, 1fr); min-height: 2.8rem; border-bottom: 1px solid #5b4930; }
+.stat_row:nth-child(odd):not(.stat_wide) { border-right: 1px solid #5b4930; }
+.stat_wide { grid-column: 1 / -1; }
+.stat_row > span:first-child { display: flex; align-items: center; padding: .45rem .55rem; color: #d8b970; background: #2b2117; border-right: 1px solid #5b4930; }
+.stat_row > strong, .editable_value { display: flex; align-items: center; min-width: 0; padding: .4rem .55rem; font-weight: 400; overflow-wrap: anywhere; }
+.stat_row input, .stat_row select { min-width: 0; margin: 0; padding: .4rem .5rem; border: 0; border-radius: 0; }
+.editable_value { gap: .25rem; padding: 0 .55rem; }
+.editable_value input { width: 5rem; border: 1px solid #705a39; }
+.facility_grid { display: grid; grid-template-columns: repeat(5, 1fr); }
+.facility_grid button { min-width: 0; min-height: 5.25rem; padding: .65rem .4rem; border-width: 0 1px 0 0; }
+.facility_grid button:last-child { border-right: 0; }
+.facility_grid strong, .facility_grid small { display: block; }
+.facility_grid small { margin-top: .35rem; line-height: 1.35; }
+.display_only_button { cursor: default; }
+.location_row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 5rem; padding: .75rem; border-top: 1px solid #5b4930; }
+.panel_title + .location_row { border-top: 0; }
+.location_row > div { min-width: 0; }
+.location_row p { margin: .3rem 0; color: #c6baa2; }
+.location_row button { flex: 0 0 auto; }
+.placeholder_location { background: rgba(52, 39, 25, .16); }
+.job_choices { padding: .75rem; border-top: 1px solid #5b4930; }
+.job_choices h3 { margin: 0 0 .65rem; color: #d8b970; font-size: 1rem; }
+.job_choices button { margin: 0 .5rem .5rem 0; }
+.record_table { padding: 0; }
+.muted { margin: 0; padding: 1rem; color: #c6baa2; }
+@media (max-width: 900px) {
+  .game_dashboard { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .app { padding-inline: .65rem; }
+  header { align-items: flex-start; }
+  header h1 { font-size: 1.2rem; }
+  .header_actions { flex-direction: column; align-items: stretch; }
+  .character_content { grid-template-columns: minmax(125px, 36%) 1fr; }
+  .portrait_placeholder { min-height: 240px; }
+  .character_stats { grid-template-columns: 1fr; }
+  .stat_row, .stat_row:nth-child(odd):not(.stat_wide) { grid-column: 1; border-right: 0; }
+  .facility_grid { grid-template-columns: repeat(2, 1fr); }
+  .creation_traits { grid-template-columns: repeat(2, 1fr); }
+  .facility_grid button { border-bottom: 1px solid #5b4930; }
+  .location_row { align-items: flex-start; }
+}
+@media (max-width: 420px) {
+  .character_content { grid-template-columns: 1fr; }
+  .portrait_column { border-right: 0; border-bottom: 1px solid #5b4930; }
+  .portrait_placeholder { min-height: 210px; }
+}

@@ -3,7 +3,8 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from game.models import Area, AreaEncounter, DropEntry, Item, Job, Monster, Skill
+from game.models import Area, AreaEncounter, DropEntry, EquipmentSet, Item, Job, JobTitle, Monster, Player, Skill
+from game.services import recalculate_player_stats
 
 
 class Command(BaseCommand):
@@ -14,6 +15,7 @@ class Command(BaseCommand):
         starter_job, _ = Job.objects.update_or_create(
             name="遊方客",
             defaults={
+                "name_en": "Wanderer",
                 "required_level": 1,
                 "tier": Job.Tier.STARTER,
                 "prerequisite_job": None,
@@ -25,94 +27,111 @@ class Command(BaseCommand):
             },
         )
         job_rows = [
-            ("金剛力士", 1, 5, "遊方客", (30, 5, 6, 8, 0, 5, -2, "0.000")),
-            ("飛燕劍客", 1, 5, "遊方客", (10, 10, 7, 2, 0, 2, 8, "0.050")),
-            ("御靈師", 1, 5, "遊方客", (15, 25, 1, 2, 7, 5, 3, "0.020")),
-            ("方士", 1, 5, "遊方客", (5, 35, 0, 1, 10, 6, 1, "0.000")),
-            ("護法金剛", 2, 25, "金剛力士", (55, 10, 11, 15, 0, 9, -2, "0.000")),
-            ("流雲劍俠", 2, 25, "飛燕劍客", (20, 18, 13, 4, 0, 4, 15, "0.080")),
-            ("通幽使", 2, 25, "御靈師", (28, 45, 2, 4, 13, 9, 5, "0.030")),
-            ("五行術士", 2, 25, "方士", (12, 60, 0, 2, 18, 11, 2, "0.000")),
-            ("鎮獄神將", 3, 50, "護法金剛", (85, 15, 18, 24, 0, 15, -1, "0.020")),
-            ("凌霄劍仙", 3, 50, "流雲劍俠", (35, 28, 21, 7, 0, 7, 23, "0.120")),
-            ("萬靈宗師", 3, 50, "通幽使", (45, 70, 3, 7, 21, 15, 8, "0.050")),
-            ("乾坤天師", 3, 50, "五行術士", (22, 90, 0, 4, 29, 18, 3, "0.020")),
+            ("武者", "Warrior", "physical", (12, 0, 0, 0, 0, 0, 0), ["刀", "劍", "槍"], "破邪斬", "Evil-Rending Slash"),
+            ("方士", "Mystic", "magical", (0, 12, 0, 0, 0, 0, 0), ["法劍", "法杖", "符器"], "五行符", "Five Elements Talisman"),
+            ("祝由師", "Ritual Healer", "magical", (0, 0, 12, 0, 0, 0, 8), ["法杖", "符器"], "祝由祓煞", "Ritual Banishment"),
+            ("夜行客", "Night Rogue", "physical", (0, 0, 0, 0, 12, 8, 0), ["短刃", "劍"], "夜襲", "Night Assault"),
+            ("山林獵手", "Wilds Hunter", "physical", (10, 8, 8, 11, 10, 8, 8), ["弓", "弩", "刀"], "伏妖箭", "Demon-Subduing Arrow"),
+            ("丹師", "Alchemist", "magical", (0, 13, 0, 0, 13, 0, 0), ["法杖", "符器"], "丹火化形", "Elixir Flame Transmutation"),
+            ("樂師", "Minstrel", "magical", (0, 10, 0, 0, 12, 8, 12), ["樂器", "短刃"], "清商鎮魂", "Pure Melody Soulward"),
+            ("通靈者", "Spirit Medium", "magical", (10, 14, 0, 14, 0, 0, 10), ["法杖", "符器"], "通幽神念", "Netherworld Communion"),
+            ("神女", "Divine Maiden", "physical", (10, 0, 11, 11, 10, 11, 8), ["槍", "劍"], "神女降魔", "Divine Demonfall"),
+            ("法主", "Arcane Hierophant", "magical", (0, 15, 15, 0, 0, 0, 8), ["法杖", "法劍"], "萬法歸一", "Convergence of All Arts"),
+            ("仙門宗主", "Immortal Sect Master", "physical", (12, 9, 12, 12, 9, 9, 14), ["劍", "法劍"], "仙門敕令", "Immortal Sect Edict"),
+            ("劍客", "Swordmaster", "physical", (12, 11, 0, 9, 12, 14, 8), ["劍"], "御劍疾斬", "Swift Flying Sword"),
+            ("行者", "Ascetic", "physical", (13, 8, 13, 0, 10, 13, 8), ["拳套", "棍"], "金剛伏魔", "Vajra Demon Subdual"),
+            ("影衛", "Shadow Guard", "physical", (12, 10, 10, 12, 12, 12, 0), ["短刃", "劍"], "無影絕殺", "Shadowless Execution"),
         ]
         jobs = {starter_job.name: starter_job}
-        adapted_jobs = {"金剛力士", "護法金剛", "方士", "五行術士", "乾坤天師"}
-        for name, tier, required_level, prerequisite_name, bonuses in job_rows:
-            max_hp, max_mp, atk, defense, intelligence, magic_defense, agility, critical = bonuses
+        adapted_jobs = {"方士", "祝由師", "丹師"}
+        for name, name_en, archetype, requirements, weapon_types, skill_name, skill_name_en in job_rows:
             job, _ = Job.objects.update_or_create(
                 name=name,
                 defaults={
-                    "archetype": Job.Archetype.MAGICAL if name in {"御靈師", "通幽使", "萬靈宗師", "方士", "五行術士", "乾坤天師"} else Job.Archetype.PHYSICAL,
-                    "required_level": required_level,
-                    "tier": tier,
-                    "prerequisite_job": jobs[prerequisite_name],
-                    "max_hp_bonus": max_hp,
-                    "max_mp_bonus": max_mp,
-                    "atk_bonus": atk,
-                    "defense_bonus": defense,
-                    "intelligence_bonus": intelligence,
-                    "magic_defense_bonus": magic_defense,
-                    "agility_bonus": agility,
-                    "critical_bonus": Decimal(critical),
+                    "name_en": name_en,
+                    "archetype": archetype,
+                    "required_level": 1,
+                    "tier": Job.Tier.FIRST,
+                    "prerequisite_job": starter_job,
+                    "max_hp_bonus": 0, "max_mp_bonus": 0, "atk_bonus": 0, "defense_bonus": 0,
+                    "intelligence_bonus": 0, "magic_defense_bonus": 0, "agility_bonus": 0,
+                    "critical_bonus": Decimal("0.000"),
+                    "required_strength": requirements[0], "required_intellect": requirements[1],
+                    "required_piety": requirements[2], "required_vitality": requirements[3],
+                    "required_dexterity": requirements[4], "required_speed": requirements[5],
+                    "required_charisma": requirements[6], "allowed_weapon_types": weapon_types,
                     "enabled": True,
                     "source_work": "",
                     "source_reference": "中國志怪、武俠、佛教護法、方術與術數意象；詳見 CONTENT_DESIGN.md",
                     "adaptation_type": Job.AdaptationType.ADAPTED if name in adapted_jobs else Job.AdaptationType.ORIGINAL,
-                    "lore_note": "能力值與轉職路線為遊戲化設計；題材定位詳見 CONTENT_DESIGN.md。",
+                    "lore_note": "七特性門檻參考 FF Adventure；名稱、技能與題材定位詳見 CONTENT_DESIGN.md。",
                 },
             )
             jobs[name] = job
-        skill_rows = [
-            ("金剛力士", "破邪重擊", 3, "physical", "1.45", "0.350", "0.000", "always"),
-            ("金剛力士", "金剛震", 6, "physical", "1.75", "0.250", "-0.050", "target_hp_gte_50"),
-            ("金剛力士", "背水一擊", 5, "physical", "2.00", "1.000", "-0.100", "self_hp_lte_30"),
-            ("飛燕劍客", "燕返", 3, "physical", "1.35", "0.400", "0.050", "always"),
-            ("飛燕劍客", "流星趕月", 6, "physical", "1.80", "0.250", "-0.050", "target_hp_gte_50"),
-            ("飛燕劍客", "絕影一閃", 5, "physical", "1.65", "1.000", "0.100", "self_hp_lte_30"),
-            ("御靈師", "靈狐襲", 4, "magical", "1.40", "0.350", "0.050", "always"),
-            ("御靈師", "紙將衝陣", 7, "magical", "1.75", "0.250", "-0.050", "target_hp_gte_50"),
-            ("方士", "火符咒", 4, "magical", "1.50", "0.350", "0.000", "always"),
-            ("方士", "五雷咒", 8, "magical", "2.00", "0.250", "-0.100", "target_hp_gte_50"),
-            ("方士", "鎮邪咒", 6, "magical", "1.65", "1.000", "0.100", "self_hp_lte_30"),
-            ("護法金剛", "護法棍", 8, "physical", "1.90", "0.300", "0.050", "target_hp_gte_50"),
-            ("護法金剛", "伏魔震", 7, "physical", "2.30", "1.000", "0.000", "self_hp_lte_30"),
-            ("護法金剛", "金剛伏魔棍", 6, "physical", "1.55", "0.350", "0.050", "always"),
-            ("流雲劍俠", "流雲十三式", 8, "physical", "1.85", "0.300", "0.050", "target_hp_gte_50"),
-            ("流雲劍俠", "雲蹤斬", 7, "physical", "2.00", "1.000", "0.100", "self_hp_lte_30"),
-            ("流雲劍俠", "流雲快劍", 6, "physical", "1.60", "0.400", "0.080", "always"),
-            ("通幽使", "幽冥鬼卒", 9, "magical", "1.90", "0.300", "0.000", "target_hp_gte_50"),
-            ("通幽使", "攝魂靈獸", 8, "magical", "1.70", "1.000", "0.050", "self_hp_lte_30"),
-            ("通幽使", "幽燈引魂", 7, "magical", "1.60", "0.350", "0.050", "always"),
-            ("五行術士", "五行烈焰", 9, "magical", "2.10", "0.300", "-0.050", "target_hp_gte_50"),
-            ("五行術士", "水雷法", 8, "magical", "1.85", "1.000", "0.050", "self_hp_lte_30"),
-            ("五行術士", "五行咒", 7, "magical", "1.75", "0.350", "0.000", "always"),
-            ("鎮獄神將", "鎮獄破", 11, "physical", "2.40", "0.250", "-0.050", "target_hp_gte_50"),
-            ("鎮獄神將", "神將怒", 9, "physical", "3.00", "1.000", "-0.050", "self_hp_lte_30"),
-            ("鎮獄神將", "神將戰戟", 8, "physical", "1.90", "0.350", "0.000", "always"),
-            ("凌霄劍仙", "凌霄一劍", 12, "physical", "2.45", "0.250", "-0.050", "target_hp_gte_50"),
-            ("凌霄劍仙", "劍落九霄", 10, "physical", "3.00", "1.000", "0.050", "self_hp_lte_30"),
-            ("凌霄劍仙", "御劍凌空", 8, "physical", "1.95", "0.400", "0.080", "always"),
-            ("萬靈宗師", "萬靈朝宗", 13, "magical", "2.50", "0.250", "-0.100", "target_hp_gte_50"),
-            ("萬靈宗師", "神將敕令", 11, "magical", "3.15", "1.000", "0.000", "self_hp_lte_30"),
-            ("萬靈宗師", "萬靈共鳴", 9, "magical", "2.00", "0.350", "0.050", "always"),
-            ("乾坤天師", "乾坤雷劫", 14, "magical", "2.70", "0.200", "-0.150", "target_hp_gte_50"),
-            ("乾坤天師", "天罡鎮煞", 11, "magical", "3.25", "1.000", "0.050", "self_hp_lte_30"),
-            ("乾坤天師", "乾坤法印", 9, "magical", "2.10", "0.350", "0.000", "always"),
-        ]
-        job_skill_priorities = {}
-        for job_name, name, mp_cost, damage_type, multiplier, trigger, accuracy, condition in skill_rows:
-            priority = job_skill_priorities.get(job_name, 0) + 1
-            job_skill_priorities[job_name] = priority
-            Skill.objects.update_or_create(name=name, defaults={
-                "job": jobs[job_name], "priority": priority, "mp_cost": mp_cost, "damage_type": damage_type,
-                "power_multiplier": Decimal(multiplier), "trigger_rate": Decimal(trigger),
-                "accuracy_modifier": Decimal(accuracy), "condition": condition, "enabled": True,
-                "source_work": "", "source_reference": "三階職業戰鬥設計；詳見 PROJECT_SPEC.md",
+        title_rows = {
+            "武者": [("習武人", "Martial Initiate"), ("持刃士", "Blade Bearer"), ("破陣武士", "Linebreaker"), ("鎮關豪傑", "Pass Warden"), ("伏妖戰將", "Demonbane General"), ("百戰宗師", "Master of a Hundred Battles"), ("蕩魔武聖", "Demon-Quelling War Saint")],
+            "方士": [("習符童", "Talisman Novice"), ("行法士", "Rite Adept"), ("五行術者", "Fivefold Caster"), ("役鬼方士", "Spirit Binder"), ("玄壇法師", "Arcane Altar Master"), ("通天真人", "Heaven-Reaching Sage"), ("乾坤道宗", "Sovereign of Heaven and Earth")],
+            "祝由師": [("習祝者", "Ritual Novice"), ("安魂使", "Soul Soother"), ("禳災師", "Calamity Averter"), ("護命祝官", "Life-Warding Ritualist"), ("百病祓師", "Master of Banishment"), ("回春聖手", "Sage of Renewal"), ("濟世祝宗", "Grand Ritual Healer")],
+            "夜行客": [("探夜人", "Night Scout"), ("潛蹤客", "Veiled Strider"), ("飛簷手", "Rooftop Runner"), ("無聲刺客", "Silent Assassin"), ("逐影豪俠", "Shadow Chaser"), ("幽都夜使", "Nocturne Envoy"), ("萬影魁首", "Sovereign of Shadows")],
+            "山林獵手": [("尋跡人", "Trail Seeker"), ("山徑斥候", "Mountain Scout"), ("伏妖弓手", "Demonstalker Archer"), ("百獸獵師", "Beastwise Hunter"), ("荒野巡狩", "Warden of the Wilds"), ("群山守望", "Sentinel of the Peaks"), ("萬嶺獵宗", "Master of Ten Thousand Ridges")],
+            "丹師": [("採藥童", "Herb Gatherer"), ("煉火徒", "Crucible Adept"), ("調鼎師", "Cauldron Crafter"), ("百草丹師", "Elixir Herbalist"), ("玄爐妙手", "Mystic Crucible Master"), ("九轉丹宗", "Master of Ninefold Elixirs"), ("造化藥君", "Lord of Transmutation")],
+            "樂師": [("習律人", "Melody Novice"), ("清音客", "Pure-Tone Minstrel"), ("鎮魂樂師", "Soulward Musician"), ("幽弦妙手", "Master of Phantom Strings"), ("百曲宗匠", "Virtuoso of a Hundred Songs"), ("天籟樂聖", "Sage of Celestial Harmony"), ("萬靈知音", "Voice of All Spirits")],
+            "通靈者": [("感靈人", "Spirit Sensitive"), ("問魂使", "Soul Inquirer"), ("通幽客", "Netherworld Seer"), ("御念師", "Mindweaver"), ("萬象靈媒", "Medium of Myriad Forms"), ("陰陽先知", "Oracle Between Realms"), ("太虛通靈聖", "Sage of the Great Void")],
+            "神女": [("奉燈女", "Lamp Bearer"), ("護祠使", "Shrine Warden"), ("玄甲神女", "Mystic-Armed Maiden"), ("逐邪戰姬", "Bane-Chasing Champion"), ("天門女將", "General of the Heavenly Gate"), ("九霄英靈", "Heroine of the Nine Heavens"), ("鎮世神姬", "World-Warding Divine Maiden")],
+            "法主": [("研法者", "Arcane Scholar"), ("講法師", "Doctrine Keeper"), ("掌壇使", "Altar Custodian"), ("統法尊者", "Exalted Arcanist"), ("萬法宗師", "Master of Myriad Arts"), ("天章法主", "Hierophant of the Celestial Canon"), ("玄穹聖宗", "Sovereign of the Mystic Firmament")],
+            "仙門宗主": [("外門執事", "Outer Court Steward"), ("內門護法", "Inner Court Guardian"), ("傳功長老", "Teaching Hall Elder"), ("一峰之主", "Master of One Peak"), ("仙門掌教", "Head of the Immortal Sect"), ("群仙盟主", "Lord of the Immortal Alliance"), ("萬宗共主", "Sovereign of Ten Thousand Sects")],
+            "劍客": [("試劍人", "Sword Aspirant"), ("行劍客", "Wandering Swordsman"), ("疾風劍士", "Gale Swordsman"), ("御劍名家", "Flying Sword Adept"), ("斬妖劍豪", "Demon-Slaying Swordmaster"), ("凌霄劍宗", "Sky-Piercing Sword Sage"), ("一劍天尊", "Celestial Sword Sovereign")],
+            "行者": [("苦行人", "Wayfaring Ascetic"), ("鍛體者", "Body-Tempering Adept"), ("伏魔行者", "Demon-Subduing Pilgrim"), ("金身護法", "Golden-Body Guardian"), ("無畏尊者", "Fearless Venerable"), ("明心大師", "Master of the Clear Mind"), ("渡世聖行", "World-Crossing Sage")],
+            "影衛": [("候影人", "Shadow Watcher"), ("潛行衛", "Veiled Guard"), ("無聲刃", "Silent Blade"), ("夜幕使", "Envoy of Night"), ("千面影衛", "Thousand-Faced Guard"), ("無形統領", "Commander Unseen"), ("幽影至尊", "Sovereign of Hidden Shadows")],
+        }
+        level_ranges = ((1, 6), (7, 13), (14, 20), (21, 27), (28, 34), (35, 41), (42, 99))
+        for job_name, titles in title_rows.items():
+            for rank, ((min_level, max_level), (title_name, title_name_en)) in enumerate(zip(level_ranges, titles), 1):
+                JobTitle.objects.update_or_create(job=jobs[job_name], rank=rank, defaults={
+                    "min_level": min_level, "max_level": max_level, "name": title_name, "name_en": title_name_en,
+                    "source_work": "", "source_reference": "中國志怪與武俠題材的原創稱號；七階結構參考 FF Adventure",
+                    "adaptation_type": JobTitle.AdaptationType.ORIGINAL,
+                    "lore_note": "名稱為本專案原創；只作身分顯示，不提供能力加成或功能解鎖。",
+                })
+        active_job_names = {"遊方客", *jobs.keys()}
+        legacy_mapping = {
+            "金剛力士": "武者", "護法金剛": "武者", "鎮獄神將": "武者",
+            "飛燕劍客": "劍客", "流雲劍俠": "劍客", "凌霄劍仙": "劍客",
+            "御靈師": "通靈者", "通幽使": "通靈者", "萬靈宗師": "通靈者",
+            "五行術士": "方士", "乾坤天師": "方士",
+        }
+        for legacy_name, target_name in legacy_mapping.items():
+            Player.objects.filter(job__name=legacy_name).update(job=jobs[target_name])
+        Job.objects.filter(name__in=legacy_mapping).exclude(name__in=active_job_names).update(enabled=False)
+        for player in Player.objects.select_related("job").all():
+            recalculate_player_stats(player)
+            player.save()
+            try:
+                equipment = player.equipment
+            except EquipmentSet.DoesNotExist:
+                continue
+            if equipment.weapon and equipment.weapon.weapon_type not in player.job.allowed_weapon_types:
+                equipment.weapon = None
+                equipment.save(update_fields=["weapon"])
+
+        legacy_skill_names = (
+            "破邪重擊", "金剛震", "背水一擊", "燕返", "流星趕月", "絕影一閃",
+            "靈狐襲", "紙將衝陣", "火符咒", "五雷咒", "鎮邪咒", "護法棍",
+            "伏魔震", "金剛伏魔棍", "流雲十三式", "雲蹤斬", "流雲快劍",
+            "幽冥鬼卒", "攝魂靈獸", "幽燈引魂", "五行烈焰", "水雷法", "五行咒",
+            "鎮獄破", "神將怒", "神將戰戟", "凌霄一劍", "劍落九霄", "御劍凌空",
+            "萬靈朝宗", "神將敕令", "萬靈共鳴", "乾坤雷劫", "天罡鎮煞", "乾坤法印",
+        )
+        for index, legacy_skill_name in enumerate(legacy_skill_names, 100):
+            Skill.objects.filter(name=legacy_skill_name).update(enabled=False, priority=index)
+        for job_name, _, archetype, _, _, skill_name, skill_name_en in job_rows:
+            Skill.objects.update_or_create(name=skill_name, defaults={
+                "name_en": skill_name_en, "job": jobs[job_name], "priority": 1, "mp_cost": 4, "damage_type": archetype,
+                "power_multiplier": Decimal("1.50"), "trigger_rate": Decimal("0.350"),
+                "accuracy_modifier": Decimal("0.000"), "condition": Skill.Condition.ALWAYS, "enabled": True,
+                "source_work": "", "source_reference": "十四職業代表技能；詳見 CONTENT_DESIGN.md",
                 "adaptation_type": Skill.AdaptationType.ORIGINAL,
-                "lore_note": "名稱與戰鬥數值為遊戲化設計。",
+                "lore_note": "名稱為本專案原創；首版共用技能數值，留待戰鬥平衡階段調整。",
             })
         area, _ = Area.objects.update_or_create(
             name="蘭若古道",
