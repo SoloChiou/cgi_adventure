@@ -138,7 +138,12 @@ class GameStateView(APIView):
         return Response({
             "player": _player_data(player),
             "areas": [{"id": row.pk, "name": row.name, "description": row.description, "required_level": row.required_level, "cooldown_seconds": row.cooldown_seconds, "is_level_simulation": row.is_level_simulation} for row in areas],
-            "recent_battles": [{"id": row.pk, "result": row.result, "monster_name": row.monster_snapshot.get("name", "未知妖物"), "created_at": row.created_at} for row in recent],
+            "recent_battles": [{
+                "id": row.pk, "result": row.result,
+                "monster_name": row.monster_snapshot.get("name", "未知妖物"),
+                "monster_name_en": row.monster_snapshot.get("name_en", "Unknown Monster"),
+                "created_at": row.created_at,
+            } for row in recent],
             "job_transition_available": bool(player and available_job_transitions(player).exists()),
             "development_controls": settings.DEBUG,
             "development_jobs": development_jobs,
@@ -175,7 +180,18 @@ class PlayerCreateView(APIView):
 class JobProgressionView(APIView):
     def get(self, request):
         player = get_object_or_404(Player.objects.select_related("job"), account__user=request.user)
-        return Response({"player": _player_data(_current_player(request.user)), "jobs": [{"id": row.pk, "name": row.name, "name_en": row.name_en, "tier": row.tier, "required_level": row.required_level} for row in available_job_transitions(player)]})
+        available_jobs = list(available_job_transitions(player))
+        available_ids = {job.pk for job in available_jobs}
+        all_jobs = Job.objects.filter(enabled=True, tier=Job.Tier.FIRST).order_by("id")
+        return Response({"player": _player_data(_current_player(request.user)), "jobs": [{
+            "id": row.pk, "name": row.name, "name_en": row.name_en,
+            "requirements": {field: getattr(row, "required_{}".format(field)) for field in TRAIT_FIELDS},
+        } for row in available_jobs], "all_jobs": [{
+            "id": row.pk, "name": row.name, "name_en": row.name_en,
+            "requirements": {field: getattr(row, "required_{}".format(field)) for field in TRAIT_FIELDS},
+            "eligible": row.pk in available_ids,
+            "is_current": row.pk == player.job_id,
+        } for row in all_jobs]})
 
 
 class JobTransitionView(APIView):
@@ -222,7 +238,9 @@ class BattleView(APIView):
 class BattleHistoryView(APIView):
     def get(self, request, battle_id):
         row = get_object_or_404(BattleRecord, pk=battle_id, player__account__user=request.user)
-        return Response({"battle_id": row.pk, "random_seed": row.random_seed, "result": row.result, "end_reason": row.end_reason, "monster_snapshot": row.monster_snapshot, "rounds": row.rounds, "rewards": row.rewards, "created_at": row.created_at})
+        from .battle_narrative import BattleNarrativeComposer
+        composer = BattleNarrativeComposer(row.random_seed)
+        return Response({"battle_id": row.pk, "random_seed": row.random_seed, "result": row.result, "end_reason": row.end_reason, "monster_snapshot": row.monster_snapshot, "rounds": row.rounds, "narratives": {"zh-TW": composer.compose(row.rounds, "zh-TW"), "en": composer.compose(row.rounds, "en")}, "rewards": row.rewards, "created_at": row.created_at})
 
 
 class InventoryView(APIView):

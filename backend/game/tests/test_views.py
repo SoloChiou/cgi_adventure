@@ -149,6 +149,16 @@ class GameApiTests(ApiFixture):
 
         self.assertIsNone(response.json()["player"]["next_level_exp"])
 
+    def test_disabled_area_is_hidden_and_cannot_be_battled(self):
+        self.area.enabled = False
+        self.area.save(update_fields=["enabled"])
+
+        state_response = self.client.get(reverse("game:game_state"))
+        battle_response = self.client.post(reverse("game:battle", args=[self.area.pk]))
+
+        self.assertNotIn(self.area.pk, [row["id"] for row in state_response.json()["areas"]])
+        self.assertEqual(battle_response.status_code, 404)
+
     def test_game_state_returns_the_unique_title_at_every_level_boundary(self):
         self._create_titles()
         expected = {1: 1, 6: 1, 7: 2, 13: 2, 14: 3, 20: 3, 21: 4, 27: 4, 28: 5, 34: 5, 35: 6, 41: 6, 42: 7, 99: 7}
@@ -221,14 +231,42 @@ class GameApiTests(ApiFixture):
 
 
 class JobApiTests(ApiFixture):
+    def test_progression_returns_all_job_requirements_and_backend_eligibility(self):
+        self.job.tier = Job.Tier.FIRST
+        self.job.save(update_fields=["tier"])
+        self.player.strength = 12
+        self.player.save(update_fields=["strength"])
+        eligible = Job.objects.create(name="武者", name_en="Warrior", tier=Job.Tier.FIRST, required_strength=12)
+        unavailable = Job.objects.create(name="方士", name_en="Mystic", tier=Job.Tier.FIRST, required_intellect=12)
+
+        response = self.client.get(reverse("game:job_progression"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row["id"] for row in response.json()["jobs"]], [eligible.pk])
+        rows = {row["id"]: row for row in response.json()["all_jobs"]}
+        self.assertTrue(rows[eligible.pk]["eligible"])
+        self.assertFalse(rows[eligible.pk]["is_current"])
+        self.assertEqual(rows[eligible.pk]["requirements"]["strength"], 12)
+        self.assertFalse(rows[unavailable.pk]["eligible"])
+        self.assertTrue(rows[self.job.pk]["is_current"])
+        self.assertFalse(rows[self.job.pk]["eligible"])
+
     def test_transition_only_accepts_available_job(self):
         target = Job.objects.create(name="金剛力士", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.job)
         self.player.level = 5
-        self.player.save(update_fields=["level"])
+        self.player.exp = 321
+        self.player.save(update_fields=["level", "exp"])
         response = self.client.post(reverse("game:job_transition"), {"job_id": target.pk}, format="json")
         self.assertEqual(response.status_code, 200)
         self.player.refresh_from_db()
         self.assertEqual(self.player.job, target)
+        self.assertEqual(self.player.level, 1)
+        self.assertEqual(self.player.exp, 0)
+
+        duplicate = self.client.post(reverse("game:job_transition"), {"job_id": target.pk}, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.job_count, 1)
 
     @override_settings(DEBUG=False)
     def test_development_player_endpoint_is_disabled_in_production(self):

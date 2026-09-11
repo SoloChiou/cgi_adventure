@@ -1,6 +1,8 @@
 export type Locale = "en" | "zh-TW";
 
 const englishContent: Record<string, string> = {
+  "冒險探索": "Adventure Exploration",
+  "展開冒險之旅。": "Set out on an adventure.",
   "武者": "Warrior",
   "祝由師": "Ritual Healer",
   "夜行客": "Night Rogue",
@@ -89,6 +91,18 @@ const englishContent: Record<string, string> = {
   "畫皮鬼": "Painted-Skin Demon",
   "修行幻影": "Training Phantom",
   "未知妖物": "Unknown Creature",
+  "刀": "Blade",
+  "劍": "Sword",
+  "槍": "Spear",
+  "法劍": "Ritual Sword",
+  "法杖": "Staff",
+  "符器": "Talisman Focus",
+  "短刃": "Dagger",
+  "弓": "Bow",
+  "弩": "Crossbow",
+  "樂器": "Instrument",
+  "拳套": "Gauntlet",
+  "棍": "Staff Weapon",
 };
 
 const englishErrors: Record<string, string> = {

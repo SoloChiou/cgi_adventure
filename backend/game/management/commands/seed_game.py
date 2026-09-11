@@ -1,17 +1,23 @@
 from decimal import Decimal
+from pathlib import Path
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from game.models import Area, AreaEncounter, DropEntry, EquipmentSet, Item, Job, JobTitle, Monster, Player, Skill
+from game.monster_data import load_monster_ini
+from game.models import Area, AreaEncounter, EquipmentSet, Item, Job, JobTitle, Monster, Player, Skill
 from game.services import recalculate_player_stats
 
 
+MONSTER_INI_PATH = Path(__file__).resolve().parents[2] / "data" / "monster.ini"
+
+
 class Command(BaseCommand):
-    help = "建立中國鬼怪文學題材的第一版垂直切片資料"
+    help = "建立遊戲初始資料與 FF Adventure 參考怪物資料"
 
     @transaction.atomic
     def handle(self, *args, **options):
+        Area.objects.filter(name__in=("蘭若古道", "等級模擬場")).update(enabled=False)
         starter_job, _ = Job.objects.update_or_create(
             name="遊方客",
             defaults={
@@ -133,33 +139,6 @@ class Command(BaseCommand):
                 "adaptation_type": Skill.AdaptationType.ORIGINAL,
                 "lore_note": "名稱為本專案原創；首版共用技能數值，留待戰鬥平衡階段調整。",
             })
-        area, _ = Area.objects.update_or_create(
-            name="蘭若古道",
-            defaults={
-                "description": "通往荒寺的幽暗古道，夜行者常在此遇見狐影與遊魂。",
-                "required_level": 1,
-                "cooldown_seconds": 3,
-                "enabled": True,
-                "source_work": "《聊齋志異》",
-                "source_reference": "〈聶小倩〉的蘭若寺與志怪旅途意象",
-                "adaptation_type": Area.AdaptationType.ADAPTED,
-                "lore_note": "首個垂直切片場地；借用蘭若意象，地形與遭遇配置為遊戲改編。",
-            },
-        )
-        simulation_area, _ = Area.objects.update_or_create(
-            name="等級模擬場",
-            defaults={
-                "description": "依挑戰者目前等級生成同級修行幻影，供本機戰鬥驗證使用。",
-                "required_level": 1,
-                "cooldown_seconds": 0,
-                "is_level_simulation": True,
-                "enabled": True,
-                "source_work": "",
-                "source_reference": "本機戰鬥平衡驗證需求",
-                "adaptation_type": Area.AdaptationType.ORIGINAL,
-                "lore_note": "DEBUG 專用無獎勵區域；怪物等級與能力由伺服器依角色等級建立當場快照。",
-            },
-        )
         weapon, _ = Item.objects.update_or_create(
             name="桃木劍",
             defaults={
@@ -208,44 +187,46 @@ class Command(BaseCommand):
                 "lore_note": "供初期掉落與後續製作系統使用的原創材料。",
             },
         )
-        monsters = [
-            ("遊魂", {"level": 1, "max_hp": 16, "atk": 5, "defense": 1, "agility": 2, "exp_reward": 45, "gold_min": 4, "gold_max": 8, "source_work": "", "source_reference": "中國志怪文學常見的亡魂意象", "adaptation_type": Monster.AdaptationType.ORIGINAL, "lore_note": "首區普通怪物，名稱與能力為遊戲原創。"}, 55),
-            ("狐魅", {"level": 2, "max_hp": 22, "atk": 7, "defense": 2, "agility": 7, "exp_reward": 65, "gold_min": 7, "gold_max": 12, "source_work": "《聊齋志異》", "source_reference": "多篇狐鬼故事的狐魅意象", "adaptation_type": Monster.AdaptationType.ADAPTED, "lore_note": "綜合狐魅題材改編，不指涉單一原典角色。"}, 30),
-            ("畫皮鬼", {"level": 3, "max_hp": 30, "atk": 8, "defense": 3, "agility": 5, "critical": Decimal("0.020"), "exp_reward": 85, "gold_min": 12, "gold_max": 20, "source_work": "《聊齋志異》", "source_reference": "〈畫皮〉", "adaptation_type": Monster.AdaptationType.ADAPTED, "lore_note": "依畫皮惡鬼意象改編為初期精英怪物。"}, 15),
-        ]
-        created = {}
-        for name, defaults, weight in monsters:
-            monster, _ = Monster.objects.update_or_create(name=name, defaults=defaults)
-            AreaEncounter.objects.update_or_create(area=area, monster=monster, defaults={"weight": weight})
-            created[name] = monster
-        simulation_monster, _ = Monster.objects.update_or_create(
-            name="修行幻影",
-            defaults={
+        try:
+            monsters = load_monster_ini(MONSTER_INI_PATH)
+        except (OSError, UnicodeError, ValueError) as error:
+            raise CommandError(str(error)) from error
+        Monster.objects.filter(name__in=("遊魂", "狐魅", "畫皮鬼")).delete()
+        for monster_data in monsters:
+            Monster.objects.update_or_create(name=monster_data.name, defaults={
+                "name_en": monster_data.name_en,
+                "reference_hp_range": monster_data.hp_range,
                 "level": 1,
-                "max_hp": 24,
-                "max_mp": 10,
-                "atk": 6,
-                "defense": 2,
-                "intelligence": 6,
-                "magic_defense": 2,
-                "agility": 4,
-                "critical": Decimal("0.020"),
-                "exp_reward": 0,
+                "max_hp": monster_data.max_hp,
+                "max_mp": 0,
+                "atk": monster_data.atk,
+                "defense": 0,
+                "intelligence": 0,
+                "magic_defense": 0,
+                "agility": 0,
+                "critical": Decimal("0.000"),
+                "exp_reward": monster_data.exp_reward,
                 "gold_min": 0,
                 "gold_max": 0,
-                "source_work": "",
-                "source_reference": "本機同級戰鬥驗證模板",
-                "adaptation_type": Monster.AdaptationType.ORIGINAL,
-                "lore_note": "資料庫保存 Lv.1 模板；進入等級模擬場時依角色等級建立戰鬥快照。",
-            },
-        )
-        AreaEncounter.objects.update_or_create(
-            area=simulation_area,
-            monster=simulation_monster,
-            defaults={"weight": 1},
-        )
-        DropEntry.objects.update_or_create(monster=created["遊魂"], item=armor, defaults={"drop_rate": Decimal("0.080000"), "min_quantity": 1, "max_quantity": 1})
-        DropEntry.objects.update_or_create(monster=created["狐魅"], item=ring, defaults={"drop_rate": Decimal("0.005000"), "min_quantity": 1, "max_quantity": 1})
-        DropEntry.objects.update_or_create(monster=created["畫皮鬼"], item=remnant, defaults={"drop_rate": Decimal("0.300000"), "min_quantity": 1, "max_quantity": 2})
-        DropEntry.objects.update_or_create(monster=created["畫皮鬼"], item=weapon, defaults={"drop_rate": Decimal("0.050000"), "min_quantity": 1, "max_quantity": 1})
-        self.stdout.write(self.style.SUCCESS("中國鬼怪文學題材的第一版遊戲資料已建立。"))
+                "source_work": "FF Adventure",
+                "source_reference": "reference/ffadventure/ini/monster.ini",
+                "adaptation_type": Monster.AdaptationType.ADAPTED,
+                "lore_note": "名稱已轉譯為繁體中文與英文；戰鬥數值沿用參考資料。",
+            })
+        exploration, _ = Area.objects.update_or_create(name="冒險探索", defaults={
+            "description": "展開冒險之旅。",
+            "required_level": 1,
+            "cooldown_seconds": 3,
+            "is_level_simulation": False,
+            "encounter_weight_mode": Area.EncounterWeightMode.REFERENCE_HP,
+            "enabled": True,
+            "source_work": "FF Adventure",
+            "source_reference": "reference/ffadventure/ffadventure.cgi monster",
+            "adaptation_type": Area.AdaptationType.ADAPTED,
+            "lore_note": "從完整怪物表依玩家最大 HP 與怪物 HP 隨機值計算遭遇權重。",
+        })
+        active_monsters = Monster.objects.filter(name__in=[row.name for row in monsters])
+        exploration.encounters.exclude(monster__in=active_monsters).delete()
+        for monster in active_monsters:
+            AreaEncounter.objects.update_or_create(area=exploration, monster=monster, defaults={"weight": 1})
+        self.stdout.write(self.style.SUCCESS("遊戲初始資料與雙語怪物資料已建立。"))

@@ -7,8 +7,13 @@ export interface Player { id: number; name: string; level: number; exp: number; 
 export interface Area { id: number; name: string; description: string; required_level: number; cooldown_seconds: number; is_level_simulation: boolean }
 export interface DevelopmentJob { id: number; name: string; name_en: string; tier: number }
 export interface CreationJob { id: number; name: string; name_en: string; requirements: PlayerTraits }
-export interface GameState { player: Player | null; areas: Area[]; recent_battles: { id: number; result: string; monster_name: string }[]; job_transition_available: boolean; development_controls: boolean; development_jobs: DevelopmentJob[]; creation_jobs: CreationJob[] }
-export interface BattleResult { battle_id: number; result: string; monster_snapshot: { name: string }; rounds: { round: number; events: Record<string, unknown>[] }[]; rewards: { exp: number; gold: number; drops: { name: string; quantity: number }[]; level_ups: number[] } }
+export interface JobRequirement extends CreationJob { eligible: boolean; is_current: boolean }
+export interface JobProgression { player: Player; jobs: CreationJob[]; all_jobs: JobRequirement[] }
+export interface GameState { player: Player | null; areas: Area[]; recent_battles: { id: number; result: string; monster_name: string; monster_name_en: string }[]; job_transition_available: boolean; development_controls: boolean; development_jobs: DevelopmentJob[]; creation_jobs: CreationJob[] }
+export interface CombatUnitSnapshot { unit_id: string; name: string; name_en?: string; level: number; hp: number; mp: number; max_hp: number; max_mp: number; atk: number; defense: number; intelligence: number; magic_defense: number; agility: number; critical: number }
+export interface BattleEvent { actor_unit_id: string; actor_name: string; actor_name_en?: string; target_unit_ids: string[]; target_name: string; target_name_en?: string; action_type: "attack" | "skill"; skill_name: string | null; skill_name_en?: string | null; mp_cost: number; mp_after: number; hit: boolean; critical: boolean; damage: number; hp_before: number; hp_after: number }
+export interface BattleNarrativeLine { event_type: string; tone: "normal" | "skill" | "critical"; text: string }
+export interface BattleResult { battle_id: number; result: "win" | "lose"; end_reason: string; player_before: CombatUnitSnapshot; player_after: CombatUnitSnapshot; monster_snapshot: CombatUnitSnapshot; rounds: { round: number; events: BattleEvent[] }[]; narratives: { "zh-TW": BattleNarrativeLine[]; en: BattleNarrativeLine[] }; rewards: { exp: number; gold: number; drops: { item_id: number; name: string; quantity: number }[]; proficiency: { weapon_type: string; exp: number } | null; level_ups: number[] } }
 
 function remember(session: AuthSession) { if (session.csrf_token) setCsrfToken(session.csrf_token); if (session.api_token) setApiToken(session.api_token); return session; }
 export async function getSession() { try { return remember((await api.get<AuthSession>("/auth/session/")).data); } catch (error) { if (!axios.isAxiosError(error) || error.response?.status !== 401) throw error; setApiToken(""); return remember((await api.get<AuthSession>("/auth/session/")).data); } }
@@ -21,7 +26,7 @@ export async function fight(areaId: number) { return (await api.post<BattleResul
 export async function getInventory() { return (await api.get("/inventory/")).data; }
 export async function equip(itemId: number) { return (await api.post(`/inventory/${itemId}/equip/`)).data; }
 export async function getLeaderboard() { return (await api.get("/leaderboard/")).data; }
-export async function getJobs() { return (await api.get("/jobs/progression/")).data; }
+export async function getJobs() { return (await api.get<JobProgression>("/jobs/progression/")).data; }
 export async function transitionJob(jobId: number) { return (await api.post("/jobs/transition/", { job_id: jobId })).data; }
 export async function setDevelopmentPlayer(level: number, jobId: number, hp: number, traits: PlayerTraits) {
   return (await api.patch<Player>("/development/player/", { level, job_id: jobId, hp, traits })).data;

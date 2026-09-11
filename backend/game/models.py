@@ -192,11 +192,16 @@ class Player(models.Model):
 
 
 class Area(SourcedContent):
+    class EncounterWeightMode(models.TextChoices):
+        FIXED = "fixed", "固定權重"
+        REFERENCE_HP = "reference_hp", "FF Adventure HP 權重"
+
     name = models.CharField(max_length=80, unique=True)
     description = models.TextField(blank=True)
     required_level = models.PositiveSmallIntegerField(default=1)
     cooldown_seconds = models.PositiveSmallIntegerField(default=3)
     is_level_simulation = models.BooleanField(default=False)
+    encounter_weight_mode = models.CharField(max_length=20, choices=EncounterWeightMode.choices, default=EncounterWeightMode.FIXED)
     enabled = models.BooleanField(default=True)
 
     def __str__(self):
@@ -205,6 +210,8 @@ class Area(SourcedContent):
 
 class Monster(SourcedContent):
     name = models.CharField(max_length=80, unique=True)
+    name_en = models.CharField(max_length=100, blank=True)
+    reference_hp_range = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     level = models.PositiveSmallIntegerField(default=1)
     max_hp = models.PositiveIntegerField()
     max_mp = models.PositiveIntegerField(default=0)
@@ -219,7 +226,10 @@ class Monster(SourcedContent):
     gold_max = models.PositiveIntegerField()
 
     class Meta:
-        constraints = [models.CheckConstraint(check=models.Q(gold_max__gte=models.F("gold_min")), name="monster_gold_range_valid")]
+        constraints = [
+            models.CheckConstraint(check=models.Q(gold_max__gte=models.F("gold_min")), name="monster_gold_range_valid"),
+            models.CheckConstraint(check=models.Q(reference_hp_range__gte=1), name="monster_reference_hp_range_valid"),
+        ]
 
     def __str__(self):
         return self.name

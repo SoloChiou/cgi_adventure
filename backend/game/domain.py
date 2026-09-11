@@ -1,6 +1,6 @@
 import math
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 MAX_ROUNDS = 100
@@ -34,6 +34,7 @@ class CombatSkill:
     trigger_rate: float
     accuracy_modifier: float
     condition: str
+    name_en: str = ""
 
 
 @dataclass
@@ -55,6 +56,7 @@ class CombatUnit:
     level: int = 1
     skills: List[CombatSkill] = field(default_factory=list)
     attack_type: str = "physical"
+    name_en: str = ""
 
     @property
     def alive(self):
@@ -112,6 +114,31 @@ class BattleOutcome:
     unit_states: Dict[str, Dict]
 
 
+@dataclass
+class BattleEvent:
+    round: int
+    actor: str
+    actor_unit_id: str
+    actor_name: str
+    actor_name_en: str
+    target: str
+    target_unit_ids: List[str]
+    target_name: str
+    target_name_en: str
+    action_type: str
+    skill_id: Optional[int]
+    skill_name: Optional[str]
+    skill_name_en: Optional[str]
+    mp_cost: int
+    mp_after: int
+    hit: bool
+    critical: bool
+    damage: int
+    hp_before: int
+    hp_after: int
+    random_rolls: Dict
+
+
 def build_turn_order(state):
     side_priority = {state.player_side.key: 0, state.enemy_side.key: 1}
     units = state.player_side.units + state.enemy_side.units
@@ -154,28 +181,31 @@ def _attack(attacker: CombatUnit, target: CombatUnit, rng, round_number: int):
     accuracy_modifier = skill.accuracy_modifier if skill else 0.0
     chance_to_hit = hit_rate(attacker.agility, target.agility, accuracy_modifier)
     hit_roll = rng.random()
-    event = {
-        "round": round_number,
-        "actor": attacker.unit_id,
-        "actor_unit_id": attacker.unit_id,
-        "actor_name": attacker.name,
-        "target": target.unit_id,
-        "target_unit_ids": [target.unit_id],
-        "target_name": target.name,
-        "action_type": "skill" if skill else "attack",
-        "skill_id": skill.skill_id if skill else None,
-        "skill_name": skill.name if skill else None,
-        "mp_cost": skill.mp_cost if skill else 0,
-        "mp_after": attacker.mp,
-        "hit": hit_roll < chance_to_hit,
-        "critical": False,
-        "damage": 0,
-        "hp_before": target.hp,
-        "hp_after": target.hp,
-        "random_rolls": {"skill_triggers": skill_rolls, "hit": hit_roll},
-    }
-    if not event["hit"]:
-        return event
+    event = BattleEvent(
+        round=round_number,
+        actor=attacker.unit_id,
+        actor_unit_id=attacker.unit_id,
+        actor_name=attacker.name,
+        actor_name_en=attacker.name_en,
+        target=target.unit_id,
+        target_unit_ids=[target.unit_id],
+        target_name=target.name,
+        target_name_en=target.name_en,
+        action_type="skill" if skill else "attack",
+        skill_id=skill.skill_id if skill else None,
+        skill_name=skill.name if skill else None,
+        skill_name_en=skill.name_en if skill else None,
+        mp_cost=skill.mp_cost if skill else 0,
+        mp_after=attacker.mp,
+        hit=hit_roll < chance_to_hit,
+        critical=False,
+        damage=0,
+        hp_before=target.hp,
+        hp_after=target.hp,
+        random_rolls={"skill_triggers": skill_rolls, "hit": hit_roll},
+    )
+    if not event.hit:
+        return asdict(event)
 
     variance = rng.uniform(0.90, 1.10)
     crit_chance = critical_rate(attacker.critical, attacker.agility, target.agility)
@@ -188,13 +218,11 @@ def _attack(attacker: CombatUnit, target: CombatUnit, rng, round_number: int):
     skill_damage = max(1, base_damage * (skill.power_multiplier if skill else 1.0))
     damage = max(1, math.floor(skill_damage * variance * (1.5 if critical else 1)))
     target.hp = max(0, target.hp - damage)
-    event.update({
-        "critical": critical,
-        "damage": damage,
-        "hp_after": target.hp,
-        "random_rolls": {"skill_triggers": skill_rolls, "hit": hit_roll, "variance": variance, "critical": crit_roll},
-    })
-    return event
+    event.critical = critical
+    event.damage = damage
+    event.hp_after = target.hp
+    event.random_rolls = {"skill_triggers": skill_rolls, "hit": hit_roll, "variance": variance, "critical": crit_roll}
+    return asdict(event)
 
 
 def _unit_states(state):

@@ -1,12 +1,24 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 
 from game.models import Area, AreaEncounter, DropEntry, GameAccount, Item, Job, JobTitle, Monster, Player, Skill
 
 
 class SeedGameTests(TestCase):
-    def test_seed_game_creates_sourced_chinese_ghost_literature_content_idempotently(self):
+    def test_seed_game_does_not_create_cancelled_areas(self):
+        call_command("seed_game", verbosity=0)
+
+        self.assertFalse(Area.objects.filter(name__in=("蘭若古道", "等級模擬場")).exists())
+        self.assertTrue(Area.objects.filter(name="冒險探索", enabled=True).exists())
+
+    def test_seed_game_creates_translated_reference_monsters_idempotently(self):
+        cancelled_area = Area.objects.create(name="蘭若古道", enabled=True)
+        cancelled_simulation = Area.objects.create(name="等級模擬場", enabled=True, is_level_simulation=True)
         call_command("seed_game", verbosity=0)
         call_command("seed_game", verbosity=0)
 
@@ -24,27 +36,43 @@ class SeedGameTests(TestCase):
         self.assertEqual(Skill.objects.filter(enabled=True).count(), 14)
         self.assertEqual(Job.objects.get(name="法主").skills.get(enabled=True).name, "萬法歸一")
         self.assertEqual(Skill.objects.get(name="萬法歸一").name_en, "Convergence of All Arts")
-        area = Area.objects.get(name="蘭若古道")
-        self.assertEqual(area.source_work, "《聊齋志異》")
-        self.assertEqual(area.adaptation_type, Area.AdaptationType.ADAPTED)
-        self.assertTrue(area.source_reference)
-        self.assertTrue(area.lore_note)
+        cancelled_area.refresh_from_db()
+        cancelled_simulation.refresh_from_db()
+        self.assertFalse(cancelled_area.enabled)
+        self.assertFalse(cancelled_simulation.enabled)
+        exploration = Area.objects.get(name="冒險探索")
+        self.assertEqual(exploration.encounter_weight_mode, Area.EncounterWeightMode.REFERENCE_HP)
 
-        self.assertEqual(Monster.objects.count(), 4)
-        self.assertEqual(set(area.encounters.values_list("monster__name", flat=True)), {"遊魂", "狐魅", "畫皮鬼"})
-        self.assertEqual(AreaEncounter.objects.filter(area=area).count(), 3)
+        self.assertEqual(Monster.objects.count(), 70)
+        self.assertEqual(AreaEncounter.objects.filter(area=exploration).count(), 70)
         self.assertEqual(Item.objects.count(), 4)
-        self.assertEqual(DropEntry.objects.count(), 4)
+        self.assertEqual(DropEntry.objects.count(), 0)
 
-        simulation_area = Area.objects.get(name="等級模擬場")
-        self.assertTrue(simulation_area.is_level_simulation)
-        self.assertEqual(simulation_area.encounters.get().monster.name, "修行幻影")
+        rat = Monster.objects.get(name="鼠")
+        self.assertEqual(rat.name_en, "Rat")
+        self.assertEqual(rat.exp_reward, 15)
+        self.assertEqual(rat.reference_hp_range, 3)
+        self.assertEqual(rat.max_hp, 5)
+        self.assertEqual(rat.atk, 2)
+        dragon = Monster.objects.get(name="巨龍")
+        self.assertEqual(dragon.name_en, "Dragon")
+        self.assertEqual(dragon.exp_reward, 3000)
+        self.assertEqual(dragon.max_hp, 999)
+        self.assertEqual(dragon.atk, 200)
+        self.assertEqual(dragon.source_reference, "reference/ffadventure/ini/monster.ini")
 
-        painted_skin = Monster.objects.get(name="畫皮鬼")
-        self.assertEqual(painted_skin.source_work, "《聊齋志異》")
-        self.assertEqual(painted_skin.source_reference, "〈畫皮〉")
-        self.assertEqual(painted_skin.adaptation_type, Monster.AdaptationType.ADAPTED)
-        self.assertTrue(painted_skin.lore_note)
+    def test_seed_game_rolls_back_when_monster_ini_is_invalid(self):
+        existing = Monster.objects.create(
+            name="保留怪物", max_hp=1, atk=1, defense=0, exp_reward=1, gold_min=0, gold_max=0
+        )
+        with TemporaryDirectory() as directory:
+            invalid_path = Path(directory) / "monster.ini"
+            invalid_path.write_text("未知怪物<>1<>1<>1<>1<>\n", encoding="utf-8")
+            with patch("game.management.commands.seed_game.MONSTER_INI_PATH", invalid_path):
+                with self.assertRaises(CommandError):
+                    call_command("seed_game", verbosity=0)
+
+        self.assertTrue(Monster.objects.filter(pk=existing.pk, name="保留怪物").exists())
 
     def test_seed_game_maps_legacy_spirit_job_to_spirit_medium(self):
         legacy = Job.objects.create(name="御靈師", tier=Job.Tier.FIRST)

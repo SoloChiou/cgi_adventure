@@ -1,15 +1,18 @@
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.test import TestCase, override_settings
+from django.db import close_old_connections, connection, connections
+from django.test import TestCase, TransactionTestCase, override_settings, skipUnlessDBFeature
 from django.utils import timezone
 
 from game.models import Area, AreaEncounter, BattleRecord, EquipmentSet, GameAccount, Item, Job, Monster, Player, PlayerItem, Skill
-from game.services import BattleCooldown, apply_job_transition, available_job_transitions, player_combat_unit, run_battle, scaled_monster_combat_unit, set_development_player_state, validate_initial_traits
+from game.services import BattleCooldown, apply_job_transition, available_job_transitions, choose_monster, player_combat_unit, run_battle, scaled_monster_combat_unit, set_development_player_state, validate_initial_traits
 
 
 class BattleServiceTests(TestCase):
@@ -20,10 +23,35 @@ class BattleServiceTests(TestCase):
         self.player = Player.objects.create(account=account, name="測試勇者", job=job, atk=100, agility=100)
         self.area = Area.objects.create(name="測試區", cooldown_seconds=3)
         self.monster = Monster.objects.create(
-            name="木樁", level=1, max_hp=1, atk=1, defense=0, agility=0,
+            name="木樁", name_en="Wooden Dummy", level=1, max_hp=1, atk=1, defense=0, agility=0,
             critical=Decimal("0"), exp_reward=250, gold_min=5, gold_max=5,
         )
         AreaEncounter.objects.create(area=self.area, monster=self.monster, weight=1)
+
+    def test_reference_encounter_weights_match_ff_adventure_formula(self):
+        self.area.encounter_weight_mode = Area.EncounterWeightMode.REFERENCE_HP
+        self.area.save(update_fields=["encounter_weight_mode"])
+        self.monster.reference_hp_range = 2
+        self.monster.save(update_fields=["reference_hp_range"])
+        tougher = Monster.objects.create(
+            name="強敵", max_hp=10, atk=2, defense=0, exp_reward=2,
+            gold_min=0, gold_max=0, reference_hp_range=4,
+        )
+        AreaEncounter.objects.create(area=self.area, monster=tougher)
+
+        class RecordingRandom:
+            def choices(self, population, weights, k):
+                self.population = population
+                self.weights = weights
+                self.k = k
+                return [population[0]]
+
+        rng = RecordingRandom()
+        selected = choose_monster(self.area, rng, player_max_hp=100)
+
+        self.assertEqual(selected, self.monster)
+        self.assertEqual(rng.weights, [50, 25])
+        self.assertEqual(rng.k, 1)
 
     def test_win_rewards_and_can_level_multiple_times(self):
         result = run_battle(user=self.user, area_id=self.area.pk, seed=1)
@@ -32,9 +60,13 @@ class BattleServiceTests(TestCase):
         self.assertEqual(result["rewards"]["gold"], 5)
         self.assertEqual(self.player.level, 2)
         self.assertEqual(BattleRecord.objects.count(), 1)
+        self.assertEqual(result["monster_snapshot"]["name_en"], "Wooden Dummy")
         event = result["rounds"][0]["events"][0]
         self.assertEqual(event["actor_unit_id"], "player:{}".format(self.player.pk))
         self.assertEqual(event["target_unit_ids"], ["monster:{}:1".format(self.monster.pk)])
+        self.assertEqual(event["target_name_en"], "Wooden Dummy")
+        self.assertTrue(result["narratives"]["zh-TW"])
+        self.assertTrue(result["narratives"]["en"])
 
     def test_cooldown_blocks_second_reward(self):
         now = timezone.now()
@@ -135,37 +167,45 @@ class JobProgressionServiceTests(TestCase):
         account = GameAccount.objects.create(user=user)
         self.starter = Job.objects.create(name="遊方客", tier=Job.Tier.STARTER)
         self.first = Job.objects.create(
-            name="金剛力士", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter,
+            name="武者", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter, required_strength=12,
             max_hp_bonus=30, max_mp_bonus=5, atk_bonus=6, defense_bonus=8,
             magic_defense_bonus=5, agility_bonus=-2,
         )
         self.second = Job.objects.create(
-            name="護法金剛", tier=Job.Tier.SECOND, required_level=25, prerequisite_job=self.first,
+            name="方士", tier=Job.Tier.FIRST, required_level=25, prerequisite_job=self.starter, required_intellect=12,
             max_hp_bonus=55, max_mp_bonus=10, atk_bonus=11, defense_bonus=15,
             magic_defense_bonus=9, agility_bonus=-2,
         )
-        self.player = Player.objects.create(account=account, name="修行者", job=self.starter, level=5)
+        self.player = Player.objects.create(account=account, name="修行者", job=self.starter, level=44, exp=9000, gold=777)
 
-    def test_transition_applies_job_bonus_once_and_preserves_level(self):
+    def test_transition_resets_level_exp_traits_and_combat_state(self):
+        self.player.strength = 12
+        self.player.save(update_fields=["strength"])
         apply_job_transition(self.player, self.first)
         self.player.refresh_from_db()
-        self.assertEqual(self.player.level, 5)
-        self.assertEqual(self.player.max_hp, 80)
-        self.assertEqual(self.player.atk, 22)
-        self.assertEqual(self.player.agility, 7)
+        self.assertEqual(self.player.level, 1)
+        self.assertEqual(self.player.exp, 0)
+        self.assertEqual(self.player.gold, 777)
+        self.assertEqual(
+            [self.player.strength, self.player.intellect, self.player.piety, self.player.vitality, self.player.dexterity, self.player.speed, self.player.charisma],
+            [12, 8, 8, 9, 9, 8, 8],
+        )
+        self.assertEqual(self.player.hp, self.player.max_hp)
+        self.assertEqual(self.player.mp, self.player.max_mp)
         self.assertEqual(self.player.job_count, 1)
 
-        self.player.level = 25
-        self.player.save(update_fields=["level"])
+        self.player.intellect = 12
+        self.player.save(update_fields=["intellect"])
         apply_job_transition(self.player, self.second)
         self.player.refresh_from_db()
-        self.assertEqual(self.player.max_hp, 205)
-        self.assertEqual(self.player.atk, 67)
+        self.assertEqual(self.player.level, 1)
+        self.assertEqual(self.player.strength, 9)
+        self.assertEqual(self.player.intellect, 12)
         self.assertEqual(self.player.job_count, 2)
 
     def test_transition_recalculates_both_attack_stats_from_traits(self):
         magical = Job.objects.create(
-            name="方士", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter,
+            name="法主", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter,
             intelligence_bonus=10, archetype=Job.Archetype.MAGICAL,
         )
         self.player.level = 5
@@ -173,8 +213,8 @@ class JobProgressionServiceTests(TestCase):
         self.player.save(update_fields=["level", "atk"])
         apply_job_transition(self.player, magical)
         self.player.refresh_from_db()
-        self.assertEqual(self.player.atk, 16)
-        self.assertEqual(self.player.intelligence, 21)
+        self.assertEqual(self.player.atk, 8)
+        self.assertEqual(self.player.intelligence, 13)
 
     def test_level_up_recalculates_stats_from_level_and_traits(self):
         magical = Job.objects.create(name="法術職", tier=Job.Tier.FIRST, archetype=Job.Archetype.MAGICAL, intelligence_bonus=10)
@@ -201,24 +241,58 @@ class JobProgressionServiceTests(TestCase):
             [8, 8, 9, 9, 8, 8],
         )
 
-    def test_transition_rejects_wrong_route(self):
-        other = Job.objects.create(name="飛燕劍客", tier=Job.Tier.FIRST, required_level=5, prerequisite_job=self.starter)
+    def test_transition_rejects_repeating_current_job(self):
+        self.player.strength = 12
+        self.player.save(update_fields=["strength"])
         apply_job_transition(self.player, self.first)
-        with self.assertRaisesMessage(ValidationError, "其他職業路線"):
-            apply_job_transition(self.player, other)
+        with self.assertRaisesMessage(ValidationError, "目前職業"):
+            apply_job_transition(self.player, self.first)
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.job_count, 1)
 
-    def test_available_transitions_respect_level(self):
+    def test_available_transitions_ignore_level_and_exclude_current_job(self):
+        self.player.strength = 12
         self.assertEqual(list(available_job_transitions(self.player)), [self.first])
-        self.player.level = 4
-        self.assertFalse(available_job_transitions(self.player).exists())
+        self.player.level = 1
+        self.player.job = self.first
+        self.player.intellect = 12
+        self.assertEqual(list(available_job_transitions(self.player)), [self.second])
 
     def test_available_transitions_respect_trait_requirements(self):
-        self.first.required_strength = 12
-        self.first.save(update_fields=["required_strength"])
+        self.player.strength = 11
+        self.player.save(update_fields=["strength"])
         self.assertFalse(available_job_transitions(self.player).exists())
         self.player.strength = 12
         self.player.save(update_fields=["strength"])
         self.assertEqual(list(available_job_transitions(self.player)), [self.first])
+
+    def test_transition_unequips_incompatible_weapon_without_deleting_it(self):
+        self.player.strength = 12
+        self.player.save(update_fields=["strength"])
+        weapon = Item.objects.create(name="舊弓", item_type=Item.Type.WEAPON, weapon_type="弓")
+        PlayerItem.objects.create(player=self.player, item=weapon)
+        equipment = EquipmentSet.objects.create(player=self.player, weapon=weapon)
+        self.first.allowed_weapon_types = ["劍"]
+        self.first.save(update_fields=["allowed_weapon_types"])
+
+        apply_job_transition(self.player, self.first)
+
+        equipment.refresh_from_db()
+        self.assertIsNone(equipment.weapon)
+        self.assertTrue(PlayerItem.objects.filter(player=self.player, item=weapon, quantity=1).exists())
+
+    @patch("game.services.recalculate_player_stats", side_effect=RuntimeError("recalculation failed"))
+    def test_transition_rolls_back_every_change_when_recalculation_fails(self, _recalculate):
+        self.player.strength = 12
+        self.player.save(update_fields=["strength"])
+        with self.assertRaisesMessage(RuntimeError, "recalculation failed"):
+            apply_job_transition(self.player, self.first)
+
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.job, self.starter)
+        self.assertEqual(self.player.level, 44)
+        self.assertEqual(self.player.exp, 9000)
+        self.assertEqual(self.player.job_count, 0)
 
     def test_initial_traits_require_exactly_ten_points(self):
         traits = {"strength": 12, "intellect": 8, "piety": 8, "vitality": 16, "dexterity": 9, "speed": 8, "charisma": 8}
@@ -294,8 +368,52 @@ class JobSkillAssignmentServiceTests(TestCase):
         self.assertEqual([skill.name for skill in unit.skills], ["術法1", "術法2", "術法3"])
 
     def test_job_transition_replaces_available_skill_set(self):
-        next_job = Job.objects.create(name="五行術士", tier=Job.Tier.SECOND, prerequisite_job=self.job, required_level=25)
+        next_job = Job.objects.create(name="武者", tier=Job.Tier.FIRST)
         next_skill = Skill.objects.create(job=next_job, name="五行咒", priority=1, mp_cost=2, damage_type="magical", power_multiplier=1.6, trigger_rate=1)
-        self.player.level = 25
-        apply_job_transition(self.player, next_job)
+        self.player = apply_job_transition(self.player, next_job)
         self.assertEqual([skill.skill_id for skill in player_combat_unit(self.player).skills], [next_skill.id])
+
+
+class ConcurrentJobTransitionTests(TransactionTestCase):
+    reset_sequences = True
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_concurrent_duplicate_transition_only_succeeds_once(self):
+        test_database_name = connection.settings_dict["NAME"]
+
+        def create_fixture():
+            close_old_connections()
+            connections["default"].settings_dict["NAME"] = test_database_name
+            user = get_user_model().objects.create_user(username="concurrent-transition")
+            account = GameAccount.objects.create(user=user)
+            current = Job.objects.create(name="武者", tier=Job.Tier.FIRST)
+            target = Job.objects.create(name="方士", tier=Job.Tier.FIRST)
+            player = Player.objects.create(account=account, name="並行修行者", job=current)
+            close_old_connections()
+            return player.pk, target.pk
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            player_id, target_id = executor.submit(create_fixture).result()
+        barrier = threading.Barrier(2)
+
+        def transition():
+            close_old_connections()
+            connections["default"].settings_dict["NAME"] = test_database_name
+            player = Player.objects.get(pk=player_id)
+            target = Job.objects.get(pk=target_id)
+            barrier.wait()
+            try:
+                apply_job_transition(player, target)
+                return True
+            except ValidationError:
+                return False
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _: transition(), range(2)))
+
+        player = Player.objects.get(pk=player_id)
+        self.assertEqual(results.count(True), 1)
+        self.assertEqual(player.job_id, target_id)
+        self.assertEqual(player.job_count, 1)

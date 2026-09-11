@@ -20,6 +20,7 @@ from .domain import (
     exp_to_next_level,
     simulate_battle,
 )
+from .battle_narrative import BattleNarrativeComposer
 from .models import (
     Area,
     BattleRecord,
@@ -43,13 +44,9 @@ INITIAL_BONUS_POINTS = 10
 
 
 def available_job_transitions(player):
-    if player.job.tier >= Job.Tier.THIRD:
-        return Job.objects.none()
     return Job.objects.filter(
         enabled=True,
-        prerequisite_job=player.job,
-        tier=player.job.tier + 1,
-        required_level__lte=player.level,
+        tier=Job.Tier.FIRST,
         required_strength__lte=player.strength,
         required_intellect__lte=player.intellect,
         required_piety__lte=player.piety,
@@ -57,7 +54,7 @@ def available_job_transitions(player):
         required_dexterity__lte=player.dexterity,
         required_speed__lte=player.speed,
         required_charisma__lte=player.charisma,
-    ).order_by("id")
+    ).exclude(pk=player.job_id).order_by("id")
 
 
 def validate_initial_traits(traits):
@@ -83,20 +80,39 @@ def job_requirements_met(job, traits):
     return all(traits[field] >= getattr(job, "required_{}".format(field)) for field in TRAIT_FIELDS)
 
 
+@transaction.atomic
 def apply_job_transition(player, target_job):
-    if target_job.prerequisite_job_id != player.job_id:
-        raise ValidationError("不能跳階或轉入其他職業路線。")
-    if target_job.tier != player.job.tier + 1 or player.level < target_job.required_level:
+    locked_player = Player.objects.select_for_update().get(pk=player.pk)
+    try:
+        locked_target = Job.objects.get(pk=target_job.pk, enabled=True, tier=Job.Tier.FIRST)
+    except Job.DoesNotExist:
         raise ValidationError("目前尚未符合轉職條件。")
-    if not job_requirements_met(target_job, {field: getattr(player, field) for field in TRAIT_FIELDS}):
+    if locked_target.pk == locked_player.job_id:
+        raise ValidationError("不能重複轉職為目前職業。")
+    current_traits = {field: getattr(locked_player, field) for field in TRAIT_FIELDS}
+    if not job_requirements_met(locked_target, current_traits):
         raise ValidationError("角色特性尚未符合此職業門檻。")
-    player.job = target_job
-    recalculate_player_stats(player)
-    player.job_count += 1
-    player.hp = player.max_hp
-    player.mp = player.max_mp
-    player.save()
-    return player
+
+    locked_player.job = locked_target
+    locked_player.level = 1
+    locked_player.exp = 0
+    for field in TRAIT_FIELDS:
+        requirement = getattr(locked_target, "required_{}".format(field))
+        setattr(locked_player, field, requirement if requirement else INITIAL_TRAITS[field])
+    recalculate_player_stats(locked_player)
+    locked_player.hp = locked_player.max_hp
+    locked_player.mp = locked_player.max_mp
+    locked_player.job_count += 1
+    locked_player.save()
+
+    try:
+        equipment = EquipmentSet.objects.select_for_update().get(player=locked_player)
+    except EquipmentSet.DoesNotExist:
+        equipment = None
+    if equipment and equipment.weapon and locked_target.allowed_weapon_types and equipment.weapon.weapon_type not in locked_target.allowed_weapon_types:
+        equipment.weapon = None
+        equipment.save(update_fields=["weapon"])
+    return locked_player
 
 
 def recalculate_player_stats(player):
@@ -186,6 +202,7 @@ def player_combat_unit(player):
             trigger_rate=float(skill.trigger_rate),
             accuracy_modifier=float(skill.accuracy_modifier),
             condition=skill.condition,
+            name_en=skill.name_en,
         )
         for skill in job_skills
     ]
@@ -218,15 +235,23 @@ def scaled_monster_combat_unit(monster, target_level, instance_number=1):
         magic_defense=monster.magic_defense + level_delta,
         agility=monster.agility + level_delta,
         critical=float(monster.critical),
-        level=target_level,
+        level=target_level, name_en=monster.name_en,
     )
 
 
-def choose_monster(area, rng):
+def choose_monster(area, rng, player_max_hp=None):
     encounters = list(area.encounters.select_related("monster"))
     if not encounters:
         raise ValidationError("此地區目前沒有怪物。")
-    return rng.choices([entry.monster for entry in encounters], weights=[entry.weight for entry in encounters], k=1)[0]
+    if area.encounter_weight_mode == Area.EncounterWeightMode.REFERENCE_HP:
+        if player_max_hp is None or player_max_hp <= 0:
+            raise ValidationError("角色最大 HP 必須大於零。")
+        if any(entry.monster.reference_hp_range <= 0 for entry in encounters):
+            raise ValidationError("怪物 HP 隨機值必須大於零。")
+        weights = [player_max_hp / entry.monster.reference_hp_range for entry in encounters]
+    else:
+        weights = [entry.weight for entry in encounters]
+    return rng.choices([entry.monster for entry in encounters], weights=weights, k=1)[0]
 
 
 def _apply_level_ups(player, rng=None):
@@ -298,7 +323,7 @@ def run_battle(*, user, area_id, seed=None, now=None):
 
     random_seed = seed if seed is not None else secrets.randbits(63)
     rng = random.Random(random_seed)
-    monster = choose_monster(area, rng)
+    monster = choose_monster(area, rng, player.max_hp)
     player_before = player_combat_unit(player)
     monster_level = player.level if area.is_level_simulation else monster.level
     monster_snapshot = scaled_monster_combat_unit(monster, monster_level)
@@ -333,6 +358,7 @@ def run_battle(*, user, area_id, seed=None, now=None):
         rewards=rewards,
         random_seed=random_seed,
     )
+    composer = BattleNarrativeComposer(random_seed)
     return {
         "battle_id": record.pk,
         "random_seed": random_seed,
@@ -342,5 +368,9 @@ def run_battle(*, user, area_id, seed=None, now=None):
         "player_after": combat_unit_dict(player_combat_unit(player)),
         "monster_snapshot": combat_unit_dict(monster_snapshot),
         "rounds": outcome.rounds,
+        "narratives": {
+            "zh-TW": composer.compose(outcome.rounds, "zh-TW"),
+            "en": composer.compose(outcome.rounds, "en"),
+        },
         "rewards": rewards,
     }

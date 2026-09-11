@@ -23,7 +23,6 @@ input, select { width: 100%; color: #f2ead9; background: #0d0a07; border: 1px so
 .creation_traits label span { display: block; margin-bottom: .3rem; color: #d8b970; }
 .error { color: #ff9d87; }
 .quiet { background: transparent; border-color: #5b4930; }
-.battle-line { padding-left: .5rem; border-left: 2px solid #705a39; }
 .game_dashboard { display: grid; grid-template-columns: minmax(380px, .85fr) minmax(480px, 1.15fr); align-items: start; gap: 1rem; }
 .game_dashboard section { margin: 0 0 1rem; padding: 0; overflow: hidden; }
 .panel_title { min-height: 2.6rem; display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .45rem .75rem; background: #342719; border-bottom: 1px solid #8c7046; }
@@ -33,6 +32,7 @@ input, select { width: 100%; color: #f2ead9; background: #0d0a07; border: 1px so
 .character_content { display: grid; grid-template-columns: minmax(150px, 38%) 1fr; min-width: 0; }
 .portrait_column { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #5b4930; }
 .portrait_placeholder { flex: 1; min-height: 220px; background: rgba(13, 10, 7, .45); border-bottom: 1px solid #5b4930; }
+.table_heading { margin: 0; padding: .4rem .55rem; color: #c8a75f; background: #211810; border-bottom: 1px solid #5b4930; font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .equipment_table > div, .record_table > div { display: grid; grid-template-columns: 5.5rem 1fr; min-height: 2.5rem; border-top: 1px solid #5b4930; }
 .equipment_table > div:first-child, .record_table > div:first-child { border-top: 0; }
 .equipment_table span, .record_table strong { display: flex; align-items: center; padding: .45rem .55rem; color: #d8b970; background: #2b2117; border-right: 1px solid #5b4930; }
@@ -61,8 +61,30 @@ input, select { width: 100%; color: #f2ead9; background: #0d0a07; border: 1px so
 .job_choices { padding: .75rem; border-top: 1px solid #5b4930; }
 .job_choices h3 { margin: 0 0 .65rem; color: #d8b970; font-size: 1rem; }
 .job_choices button { margin: 0 .5rem .5rem 0; }
+.job_requirements { margin-top: .75rem; border-top: 1px solid #5b4930; padding-top: .75rem; }
+.current_traits { display: flex; flex-wrap: wrap; gap: .35rem .75rem; margin-bottom: .65rem; color: #c6baa2; font-size: .72rem; }
+.current_traits strong { flex-basis: 100%; color: #d8b970; }
+.job_requirements_scroll { overflow-x: auto; border: 1px solid #5b4930; }
+.job_requirements table { width: 100%; min-width: 690px; border-collapse: collapse; font-size: .72rem; }
+.job_requirements th, .job_requirements td { padding: .42rem .5rem; border-right: 1px solid #463925; border-bottom: 1px solid #463925; text-align: center; white-space: nowrap; }
+.job_requirements th:first-child { position: sticky; left: 0; z-index: 1; min-width: 8rem; background: #211810; text-align: left; }
+.job_requirements thead th { color: #d8b970; background: #2b2117; }
+.job_requirements tbody tr.eligible { background: rgba(85, 125, 71, .18); }
+.job_requirements tbody tr.current { background: rgba(140, 112, 70, .2); }
 .record_table { padding: 0; }
 .muted { margin: 0; padding: 1rem; color: #c6baa2; }
+.credits { padding: .75rem 0 max(.25rem, env(safe-area-inset-bottom)); color: #9e8e73; font-size: .75rem; line-height: 1.6; text-align: center; }
+.credits a { color: #c8a75f; }
+.battle_page { width: min(960px, 100%); margin: 0 auto; }
+.battle_page > .quiet { margin-bottom: 1rem; }
+.battle_loading { text-align: center; }
+.battle_text_report { max-height: 42rem; overflow-y: auto; padding: .75rem 0; }
+.battle_text_report p { margin: 0; padding: .3rem 0; color: #d8cfbd; line-height: 1.55; }
+.battle_text_report .battle_tone_skill { color: #e0c98d; font-size: 1.08rem; font-weight: 700; }
+.battle_text_report .battle_tone_critical { color: #e79ab9; font-size: 1.2rem; font-weight: 800; }
+.battle_text_report .battle_outcome { padding-top: .6rem; font-size: 1.2rem; font-weight: 800; }
+.battle_text_report .battle_outcome_win { color: #d8b970; }
+.battle_text_report .battle_outcome_lose { color: #c98c83; }
 @media (max-width: 900px) {
   .game_dashboard { grid-template-columns: 1fr; }
 }
@@ -79,6 +101,7 @@ input, select { width: 100%; color: #f2ead9; background: #0d0a07; border: 1px so
   .creation_traits { grid-template-columns: repeat(2, 1fr); }
   .facility_grid button { border-bottom: 1px solid #5b4930; }
   .location_row { align-items: flex-start; }
+  .stat_row { grid-template-columns: minmax(6.5rem, 42%) minmax(0, 1fr); }
 }
 @media (max-width: 420px) {
   .character_content { grid-template-columns: 1fr; }
