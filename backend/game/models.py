@@ -174,6 +174,8 @@ class Player(models.Model):
     charisma = models.PositiveSmallIntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(99)])
     job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="players")
     job_count = models.PositiveSmallIntegerField(default=0)
+    battle_count = models.PositiveIntegerField(default=0)
+    victory_count = models.PositiveIntegerField(default=0)
     last_battle_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
@@ -202,6 +204,8 @@ class Area(SourcedContent):
     cooldown_seconds = models.PositiveSmallIntegerField(default=3)
     is_level_simulation = models.BooleanField(default=False)
     encounter_weight_mode = models.CharField(max_length=20, choices=EncounterWeightMode.choices, default=EncounterWeightMode.FIXED)
+    encounter_monster_hp_min = models.PositiveIntegerField(default=0)
+    encounter_monster_hp_max = models.PositiveIntegerField(null=True, blank=True)
     enabled = models.BooleanField(default=True)
 
     def __str__(self):

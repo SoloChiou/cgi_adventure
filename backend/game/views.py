@@ -47,7 +47,7 @@ def _player_data(player):
             "vitality": player.vitality, "dexterity": player.dexterity,
             "speed": player.speed, "charisma": player.charisma,
         },
-        "job_count": player.job_count, "job": {"id": player.job_id, "name": player.job.name, "name_en": player.job.name_en, "tier": player.job.tier},
+        "job_count": player.job_count, "battle_count": player.battle_count, "victory_count": player.victory_count, "job": {"id": player.job_id, "name": player.job.name, "name_en": player.job.name_en, "tier": player.job.tier},
         "title": ({"name": title.name, "name_en": title.name_en, "rank": title.rank, "min_level": title.min_level, "max_level": title.max_level} if title else None),
         "equipment": {slot: ({"id": item.pk, "name": item.name} if item else None) for slot, item in (
             ("weapon", equipment.weapon), ("armor", equipment.armor), ("accessory", equipment.accessory)

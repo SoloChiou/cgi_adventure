@@ -219,14 +219,35 @@ class Command(BaseCommand):
             "cooldown_seconds": 3,
             "is_level_simulation": False,
             "encounter_weight_mode": Area.EncounterWeightMode.REFERENCE_HP,
+            "encounter_monster_hp_min": 0,
+            "encounter_monster_hp_max": 499,
             "enabled": True,
             "source_work": "FF Adventure",
             "source_reference": "reference/ffadventure/ffadventure.cgi monster",
             "adaptation_type": Area.AdaptationType.ADAPTED,
             "lore_note": "從完整怪物表依玩家最大 HP 與怪物 HP 隨機值計算遭遇權重。",
         })
-        active_monsters = Monster.objects.filter(name__in=[row.name for row in monsters])
-        exploration.encounters.exclude(monster__in=active_monsters).delete()
-        for monster in active_monsters:
+        active_monsters = list(Monster.objects.filter(name__in=[row.name for row in monsters]))
+        exploration_monsters = [monster for monster in active_monsters if monster.max_hp < 500]
+        exploration.encounters.exclude(monster__in=exploration_monsters).delete()
+        for monster in exploration_monsters:
             AreaEncounter.objects.update_or_create(area=exploration, monster=monster, defaults={"weight": 1})
+        forest, _ = Area.objects.update_or_create(name="魔之森林", defaults={
+            "description": "沉睡著強大魔物的駭人森林。",
+            "required_level": 1,
+            "cooldown_seconds": 3,
+            "is_level_simulation": False,
+            "encounter_weight_mode": Area.EncounterWeightMode.REFERENCE_HP,
+            "encounter_monster_hp_min": 500,
+            "encounter_monster_hp_max": None,
+            "enabled": True,
+            "source_work": "FF Adventure",
+            "source_reference": "reference/ffadventure/ffadventure.cgi monster",
+            "adaptation_type": Area.AdaptationType.ADAPTED,
+            "lore_note": "只收錄 MaxHP 大於或等於 500 的怪物，並沿用冒險探索權重。",
+        })
+        forest_monsters = [monster for monster in active_monsters if monster.max_hp >= 500]
+        forest.encounters.exclude(monster__in=forest_monsters).delete()
+        for monster in forest_monsters:
+            AreaEncounter.objects.update_or_create(area=forest, monster=monster, defaults={"weight": 1})
         self.stdout.write(self.style.SUCCESS("遊戲初始資料與雙語怪物資料已建立。"))

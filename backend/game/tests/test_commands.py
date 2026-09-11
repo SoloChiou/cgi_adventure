@@ -42,9 +42,14 @@ class SeedGameTests(TestCase):
         self.assertFalse(cancelled_simulation.enabled)
         exploration = Area.objects.get(name="冒險探索")
         self.assertEqual(exploration.encounter_weight_mode, Area.EncounterWeightMode.REFERENCE_HP)
+        forest = Area.objects.get(name="魔之森林")
+        self.assertEqual(forest.encounter_weight_mode, Area.EncounterWeightMode.REFERENCE_HP)
 
         self.assertEqual(Monster.objects.count(), 70)
-        self.assertEqual(AreaEncounter.objects.filter(area=exploration).count(), 70)
+        self.assertEqual(AreaEncounter.objects.filter(area=exploration).count(), 68)
+        self.assertEqual(AreaEncounter.objects.filter(area=forest).count(), 2)
+        self.assertTrue(all(row.monster.max_hp < 500 for row in exploration.encounters.select_related("monster")))
+        self.assertTrue(all(row.monster.max_hp >= 500 for row in forest.encounters.select_related("monster")))
         self.assertEqual(Item.objects.count(), 4)
         self.assertEqual(DropEntry.objects.count(), 0)
 

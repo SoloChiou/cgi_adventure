@@ -23,7 +23,7 @@ const copy = {
     inn: "Traveler's Inn", weaponShop: "Weapon Shop", armorShop: "Armor Shop", trainingHall: "Training Hall", spiritBank: "Spirit Bank", jobShrine: "Job Shrine", adventureExploration: "Adventure Exploration", monsterForest: "Monster Forest", otherworldGate: "Otherworld Gate", arena: "Arena", messageBoard: "Message Board",
     restAndRecover: "Rest and recover.", browseWeapons: "Browse available weapons.", browseArmor: "Browse available armor.", trainAbilities: "Train character abilities.", manageSavings: "Manage stored gold.", advanceYourPath: "Changing jobs resets Level to 1, EXP to 0, and all seven traits to the new job's starting values.", beginExploration: "Set out on an adventure.", exploreTheWilds: "A fearsome forest where powerful monsters slumber.", crossIntoAnotherRealm: "Take turns challenging other players. EXP and gold cannot be earned.", challengeOtherTravelers: "Battle against all players.", readTownNotices: "Send messages to other players.",
     creditsPrefix: "Architecture inspired by FF Adventure by", creditsSuffix: "CGI Adventure is an independent reimplementation.", source: "Source",
-    battleResult: "Battle Result", player: "Player", monster: "Monster", round: "Round", attackAction: "Attack", skillAction: "Skill", hit: "Hit", miss: "Miss", criticalHit: "Critical", used: "used", attacked: "attacked", butMissed: "but the attack missed", damage: "damage", hpChange: "HP", mpAfter: "MP after action", rewards: "Rewards", drops: "Drops", noDrops: "No drops", proficiency: "Weapon proficiency", levelUp: "Level up", finalStatus: "Post-battle status",
+    battleResult: "Battle Result", player: "Player", monster: "Monster", round: "Round", attackAction: "Attack", skillAction: "Skill", hit: "Hit", miss: "Miss", criticalHit: "Critical", used: "used", attacked: "attacked", butMissed: "but the attack missed", damage: "damage", hpChange: "HP", mpAfter: "MP after action", rewards: "Rewards", levelUp: "Level up", victories: "Victories", battles: "Battles", finalStatus: "Post-battle status",
     allJobRequirements: "All Jobs and Requirements", currentTraits: "Current traits", eligible: "Eligible", unmet: "Unmet", currentJob: "Current", backToTown: "Return to town", battleInProgress: "The battle is being resolved…",
   },
   "zh-TW": {
@@ -41,7 +41,7 @@ const copy = {
     inn: "旅之宿", weaponShop: "武器屋", armorShop: "防具屋", trainingHall: "修行所", spiritBank: "陰司錢莊", jobShrine: "轉職神殿", adventureExploration: "冒險探索", monsterForest: "魔之森林", otherworldGate: "異次元之門", arena: "比武大會", messageBoard: "傳信屋",
     restAndRecover: "休息並恢復狀態。", browseWeapons: "查看可購買的武器。", browseArmor: "查看可購買的防具。", trainAbilities: "修行角色能力。", manageSavings: "管理存放的金錢。", advanceYourPath: "轉職後等級重設為 Lv.1、EXP 重設為 0，七種特性改為新職業初始值。", beginExploration: "展開冒險之旅。", exploreTheWilds: "沉睡著強大魔物的駭人森林。", crossIntoAnotherRealm: "輪流挑戰其他玩家。（無法獲得經驗值及金錢）", challengeOtherTravelers: "和所有玩家進行戰鬥。", readTownNotices: "可以傳信給其他玩家。",
     creditsPrefix: "架構參考 FF Adventure，原作者", creditsSuffix: "CGI Adventure 為獨立重新實作。", source: "保存來源",
-    battleResult: "戰鬥結果", player: "玩家", monster: "怪物", round: "回合", attackAction: "攻擊", skillAction: "技能", hit: "命中", miss: "閃避", criticalHit: "暴擊", used: "施展", attacked: "攻擊", butMissed: "但未命中", damage: "點傷害", hpChange: "HP", mpAfter: "行動後 MP", rewards: "戰鬥獎勵", drops: "掉落", noDrops: "無掉落物", proficiency: "武器熟練度", levelUp: "升級", finalStatus: "戰後狀態",
+    battleResult: "戰鬥結果", player: "玩家", monster: "怪物", round: "回合", attackAction: "攻擊", skillAction: "技能", hit: "命中", miss: "閃避", criticalHit: "暴擊", used: "施展", attacked: "攻擊", butMissed: "但未命中", damage: "點傷害", hpChange: "HP", mpAfter: "行動後 MP", rewards: "戰鬥獎勵", levelUp: "升級", victories: "勝利次數", battles: "戰鬥次數", finalStatus: "戰後狀態",
     allJobRequirements: "全部職業與門檻", currentTraits: "目前特性", eligible: "符合", unmet: "未符合", currentJob: "目前職業", backToTown: "返回城鎮", battleInProgress: "戰鬥結算中……",
   },
 } as const;
@@ -65,9 +65,9 @@ function BattleReport({battle, locale, text}: {battle: BattleResult; locale: Loc
     {battle.narratives[locale].map((line, index) => <p className={`battle_tone_${line.tone}`} key={`${line.event_type}-${index}`}>{line.text}</p>)}
     <p>EXP +{battle.rewards.exp}</p>
     <p>Gold +{battle.rewards.gold}</p>
-    <p>{text.proficiency}: {battle.rewards.proficiency ? `${contentText(battle.rewards.proficiency.weapon_type, locale)} +${battle.rewards.proficiency.exp}` : "—"}</p>
+    <p>{text.victories}: {battle.rewards.victory_count}</p>
+    <p>{text.battles}: {battle.rewards.battle_count}</p>
     <p>{text.levelUp}: {battle.rewards.level_ups.length ? battle.rewards.level_ups.map((level) => `Lv.${level}`).join(", ") : "—"}</p>
-    {battle.rewards.drops.length ? battle.rewards.drops.map((drop) => <p key={`${drop.item_id}-${drop.name}`}>{text.drops}: 【{contentText(drop.name, locale)}】×{drop.quantity}</p>) : <p>{text.drops}: {text.noDrops}</p>}
     <p className={`battle_outcome battle_outcome_${battle.result}`}>{battle.result === "win" ? text.win : text.lose}</p>
   </div>;
 }
@@ -257,9 +257,9 @@ export default function App() {
     </div>}
 
     {page === "battle" && <div className="battle_page">
-      <button className="quiet" onClick={() => void openPage("game")}>{text.backToTown}</button>
       {busy && !battle && <section className="battle_loading"><p>{text.battleInProgress}</p></section>}
       {battle && <BattleReport battle={battle} locale={locale} text={text}/>}
+      <button className="quiet battle_back_button" onClick={() => void openPage("game")}>{text.backToTown}</button>
     </div>}
 
     {page === "inventory" && <section><h2>{text.inventory}</h2>{extra?.items?.length ? extra.items.map((row: any) => <article key={row.id}><span>{contentText(row.item.name, locale)} × {row.quantity}</span>{row.item.type !== "material" && <button onClick={async () => { await equip(row.id); setExtra(await getInventory()); }}>{text.equip}</button>}</article>) : <p>{text.emptyInventory}</p>}</section>}

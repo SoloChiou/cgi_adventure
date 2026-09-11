@@ -53,11 +53,29 @@ class BattleServiceTests(TestCase):
         self.assertEqual(rng.weights, [50, 25])
         self.assertEqual(rng.k, 1)
 
+    def test_area_hp_bounds_filter_encounters(self):
+        self.area.encounter_monster_hp_max = 499
+        self.area.save(update_fields=["encounter_monster_hp_max"])
+        strong = Monster.objects.create(name="高 HP 怪物", max_hp=500, atk=2, defense=0, exp_reward=2, gold_min=0, gold_max=0)
+        AreaEncounter.objects.create(area=self.area, monster=strong)
+
+        class RecordingRandom:
+            def choices(self, population, weights, k):
+                self.population = population
+                return [population[0]]
+
+        selected = choose_monster(self.area, RecordingRandom(), player_max_hp=100)
+        self.assertEqual(selected, self.monster)
+
     def test_win_rewards_and_can_level_multiple_times(self):
         result = run_battle(user=self.user, area_id=self.area.pk, seed=1)
         self.player.refresh_from_db()
         self.assertEqual(result["result"], "win")
         self.assertEqual(result["rewards"]["gold"], 5)
+        self.assertEqual(result["rewards"]["victory_count"], 1)
+        self.assertEqual(result["rewards"]["battle_count"], 1)
+        self.assertNotIn("drops", result["rewards"])
+        self.assertNotIn("proficiency", result["rewards"])
         self.assertEqual(self.player.level, 2)
         self.assertEqual(BattleRecord.objects.count(), 1)
         self.assertEqual(result["monster_snapshot"]["name_en"], "Wooden Dummy")

@@ -7,7 +7,6 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import F
 from django.utils import timezone
 
 from .domain import (
@@ -24,12 +23,10 @@ from .battle_narrative import BattleNarrativeComposer
 from .models import (
     Area,
     BattleRecord,
-    DropEntry,
     EquipmentSet,
     Job,
     Player,
     PlayerItem,
-    WeaponProficiency,
 )
 
 
@@ -240,7 +237,11 @@ def scaled_monster_combat_unit(monster, target_level, instance_number=1):
 
 
 def choose_monster(area, rng, player_max_hp=None):
-    encounters = list(area.encounters.select_related("monster"))
+    encounters = [
+        entry for entry in area.encounters.select_related("monster")
+        if entry.monster.max_hp >= area.encounter_monster_hp_min
+        and (area.encounter_monster_hp_max is None or entry.monster.max_hp <= area.encounter_monster_hp_max)
+    ]
     if not encounters:
         raise ValidationError("此地區目前沒有怪物。")
     if area.encounter_weight_mode == Area.EncounterWeightMode.REFERENCE_HP:
@@ -270,34 +271,12 @@ def _apply_level_ups(player, rng=None):
     return levels
 
 
-def _apply_drops(player, monster, rng):
-    awarded = []
-    for entry in monster.drops.select_related("item"):
-        if rng.random() < float(entry.drop_rate):
-            quantity = rng.randint(entry.min_quantity, entry.max_quantity)
-            inventory, _ = PlayerItem.objects.select_for_update().get_or_create(player=player, item=entry.item, defaults={"quantity": 0})
-            PlayerItem.objects.filter(pk=inventory.pk).update(quantity=F("quantity") + quantity)
-            awarded.append({"item_id": entry.item_id, "name": entry.item.name, "quantity": quantity})
-    return awarded
-
-
 def _apply_rewards(player, monster, rng):
     gold = rng.randint(monster.gold_min, monster.gold_max)
     player.exp += monster.exp_reward
     player.gold += gold
-    drops = _apply_drops(player, monster, rng)
-    proficiency = None
-    try:
-        weapon = player.equipment.weapon
-    except EquipmentSet.DoesNotExist:
-        weapon = None
-    if weapon and weapon.weapon_type:
-        row, _ = WeaponProficiency.objects.select_for_update().get_or_create(player=player, weapon_type=weapon.weapon_type)
-        row.exp = F("exp") + 1
-        row.save(update_fields=["exp"])
-        proficiency = {"weapon_type": weapon.weapon_type, "exp": 1}
     level_ups = _apply_level_ups(player, rng)
-    return {"exp": monster.exp_reward, "gold": gold, "drops": drops, "proficiency": proficiency, "level_ups": level_ups}
+    return {"exp": monster.exp_reward, "gold": gold, "victory_count": player.victory_count, "battle_count": player.battle_count, "level_ups": level_ups}
 
 
 @transaction.atomic
@@ -335,6 +314,9 @@ def run_battle(*, user, area_id, seed=None, now=None):
         rng,
     )
     player_state = outcome.unit_states[player_unit.unit_id]
+    player.battle_count += 1
+    if outcome.result == "win":
+        player.victory_count += 1
     player.last_battle_at = now
     if outcome.result == "win" and not area.is_level_simulation:
         player.hp = player_state["hp"]
@@ -343,11 +325,11 @@ def run_battle(*, user, area_id, seed=None, now=None):
     elif outcome.result == "win":
         player.hp = player_state["hp"]
         player.mp = player_state["mp"]
-        rewards = {"exp": 0, "gold": 0, "drops": [], "proficiency": None, "level_ups": []}
+        rewards = {"exp": 0, "gold": 0, "victory_count": player.victory_count, "battle_count": player.battle_count, "level_ups": []}
     else:
         player.hp = max(1, player.max_hp // 4)
         player.mp = player_state["mp"]
-        rewards = {"exp": 0, "gold": 0, "drops": [], "proficiency": None, "level_ups": []}
+        rewards = {"exp": 0, "gold": 0, "victory_count": player.victory_count, "battle_count": player.battle_count, "level_ups": []}
     player.save()
     record = BattleRecord.objects.create(
         player=player,
