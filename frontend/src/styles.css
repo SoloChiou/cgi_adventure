@@ -13,6 +13,7 @@ header h1 { margin: .2rem 0 0; font-size: 1.5rem; letter-spacing: .08em; }
 .eyebrow, small { color: #b89b6c; }
 nav { justify-content: stretch; margin: 1.25rem 0; }
 nav button { flex: 1; }
+.mobile_quick_links { display: none; }
 section { border: 1px solid #5b4930; background: rgba(20, 16, 11, .88); padding: 1rem; margin: 1rem 0; }
 section h2 { margin-top: 0; color: #d8b970; }
 article { border-top: 1px dashed #5b4930; padding: 1rem 0; }
@@ -100,6 +101,9 @@ input, select { width: 100%; color: #f2ead9; background: #0d0a07; border: 1px so
   .facility_grid { grid-template-columns: repeat(2, 1fr); }
   .creation_traits { grid-template-columns: repeat(2, 1fr); }
   .facility_grid button { border-bottom: 1px solid #5b4930; }
+  .mobile_quick_links { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; position: sticky; top: 0; z-index: 5; padding: .5rem 0; margin: .5rem 0 1rem; background: #130f0a; }
+  .mobile_quick_links button { min-width: 0; }
+  #character_profile, #town_facilities, #town_outskirts { scroll-margin-top: 4.5rem; }
   .location_row { align-items: flex-start; }
   .stat_row { grid-template-columns: minmax(6.5rem, 42%) minmax(0, 1fr); }
 }

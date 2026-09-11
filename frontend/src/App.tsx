@@ -11,7 +11,7 @@ const copy = {
   en: {
     connecting: "Connecting to the Netherworld Station…", loginRequired: "LINE Login is required to enter the game.", retry: "Try again",
     eyebrow: "Supernatural text RPG", logout: "Log out", switchLanguage: "Traditional Chinese", switchLanguageLabel: "Switch language to Traditional Chinese",
-    game: "Adventure", inventory: "Inventory", leaderboard: "Leaderboard", createPlayer: "Create a Wanderer", characterName: "Character name", begin: "Begin adventure",
+    game: "Adventure", home: "Home", inventory: "Inventory", leaderboard: "Leaderboard", createPlayer: "Create a Wanderer", characterName: "Character name", begin: "Begin adventure",
     newJobPath: "Sense a new career path", chooseJob: "Choose a new job", jobResetNotice: "Changing jobs resets Level to 1, EXP to 0, and all traits to the new job's starting values.", chooseArea: "Choose an area", recommendedLevel: "Recommended level", battle: "Battle",
     encountered: "Encountered", equip: "Equip", emptyInventory: "Your inventory is empty.", wandererRanking: "Wanderer Ranking",
     connectionFailed: "Unable to connect to the service. Please try again later.", idTokenMissing: "LINE Login completed, but no ID token was returned.", edit: "Edit", cancel: "Cancel", level: "Level", job: "Job", title: "Title", hp: "HP", save: "Save", maxLevel: "MAX",
@@ -29,7 +29,7 @@ const copy = {
   "zh-TW": {
     connecting: "正在連接幽冥驛站……", loginRequired: "需要 LINE 登入才能進入遊戲。", retry: "重新嘗試",
     eyebrow: "志怪文字 RPG", logout: "登出", switchLanguage: "English", switchLanguageLabel: "切換語言為英文",
-    game: "遊歷", inventory: "背包", leaderboard: "榜單", createPlayer: "建立遊方客", characterName: "角色名稱", begin: "踏入江湖",
+    game: "遊歷", home: "首頁", inventory: "背包", leaderboard: "榜單", createPlayer: "建立遊方客", characterName: "角色名稱", begin: "踏入江湖",
     newJobPath: "感應新的職業道路", chooseJob: "選擇轉職", jobResetNotice: "轉職後等級重設為 Lv.1、EXP 重設為 0，七種特性改為新職業初始值。", chooseArea: "選擇地區", recommendedLevel: "建議等級", battle: "戰鬥",
     encountered: "遭遇", equip: "裝備", emptyInventory: "背包目前是空的。", wandererRanking: "遊方榜",
     connectionFailed: "無法連接服務，請稍後再試。", idTokenMissing: "LINE 登入完成，但未取得 ID token", edit: "編輯", cancel: "取消", level: "等級", job: "職業", title: "稱號", hp: "HP", save: "儲存", maxLevel: "已達最高等級",
@@ -131,6 +131,10 @@ export default function App() {
     catch (caught) { setError(errorText(caught, locale)); }
   }
 
+  function scrollToTownSection(id: "character_profile" | "town_facilities" | "town_outskirts") {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
     try { await createPlayer(String(data.get("name") || ""), creationTraits, Number(data.get("job_id"))); await refresh(); }
@@ -196,12 +200,12 @@ export default function App() {
 
   return <main className="app">
     <header><div><span className="eyebrow">{text.eyebrow}</span><h1>CGI Adventure</h1></div><div className="header_actions"><button className="quiet" aria-label={text.switchLanguageLabel} onClick={() => setLocale(locale === "en" ? "zh-TW" : "en")}>{text.switchLanguage}</button><button className="quiet" onClick={async () => { await signOut(); try { await logoutLine(); } catch { /* Backend 已完成登出，LIFF 未設定時不阻擋。 */ } setAuthenticated(false); }}>{text.logout}</button></div></header>
-    <nav><button onClick={() => void openPage("game")}>{text.game}</button><button onClick={() => void openPage("inventory")}>{text.inventory}</button><button onClick={() => void openPage("leaderboard")}>{text.leaderboard}</button></nav>
+    {page === "game" && state?.player && <nav className="mobile_quick_links" aria-label={text.home}><button onClick={() => scrollToTownSection("character_profile")}>{text.home}</button><button onClick={() => scrollToTownSection("town_facilities")}>{text.townFacilities}</button><button onClick={() => scrollToTownSection("town_outskirts")}>{text.townOutskirts}</button></nav>}
     {error && <p className="error">{error}</p>}
 
     {page === "game" && state && !state.player && <section><h2>{text.createPlayer}</h2><form onSubmit={create}><input name="name" maxLength={20} required placeholder={text.characterName}/><div className="creation_traits">{traitFields.map((trait) => <label key={trait}><span>{text[trait]}</span><input aria-label={text[trait]} type="number" min={baseTraits[trait]} max="18" value={creationTraits[trait]} onChange={(event) => setCreationTraits({...creationTraits, [trait]: Number(event.target.value)})}/></label>)}</div><p className={spentCreationPoints === 10 ? "muted" : "error"}>{text.bonusPointsRemaining}: {10 - spentCreationPoints}</p><label><span>{text.chooseInitialJob}</span><select name="job_id" required>{qualifiedCreationJobs.map((job) => <option key={job.id} value={job.id}>{locale === "en" ? job.name_en : job.name}</option>)}</select></label>{!qualifiedCreationJobs.length && <p className="error">{text.noEligibleJobs}</p>}<button disabled={spentCreationPoints !== 10 || !qualifiedCreationJobs.length}>{text.begin}</button></form></section>}
     {page === "game" && state?.player && <div className="game_dashboard">
-      <section className="character_panel">
+      <section id="character_profile" className="character_panel">
         <div className="panel_title"><h2>{text.characterProfile}</h2>{state.development_controls && !editingPlayer && <button className="quiet compact_button" onClick={() => setEditingPlayer(true)}>{text.edit}</button>}{editingPlayer && <div className="status_actions"><button type="button" className="quiet compact_button" onClick={() => setEditingPlayer(false)}>{text.cancel}</button><button className="compact_button" form="character_editor" disabled={busy}>{text.save}</button></div>}</div>
         <form id="character_editor" className="character_content" onSubmit={savePlayer}>
           <div className="portrait_column">
@@ -240,12 +244,12 @@ export default function App() {
       </section>
 
       <div className="town_column">
-        <section><div className="panel_title"><h2>{text.townFacilities}</h2></div><div className="facility_grid">{facilities.map(([name, description]) => <button type="button" className="display_only_button" key={name}><strong>{name}</strong><small>{description}</small></button>)}</div></section>
+        <section id="town_facilities"><div className="panel_title"><h2>{text.townFacilities}</h2></div><div className="facility_grid">{facilities.map(([name, description]) => <button type="button" className="display_only_button" key={name}><strong>{name}</strong><small>{description}</small></button>)}</div></section>
 
-        <section><div className="panel_title"><h2>{text.townOutskirts}</h2></div>
+        <section id="town_outskirts"><div className="panel_title"><h2>{text.townOutskirts}</h2></div>
           <div className="location_row"><div><strong>{text.jobShrine}</strong><p>{text.advanceYourPath}</p></div><button onClick={() => void jobs()}>{text.enter}</button></div>
           {jobProgression && <div className="job_choices"><h3>{text.chooseJob}</h3><p className="muted">{text.jobResetNotice}</p>{jobProgression.jobs.length ? jobProgression.jobs.map((job) => <button disabled={busy} key={job.id} onClick={() => void chooseJob(job.id)}>{locale === "en" && job.name_en ? job.name_en : job.name}</button>) : <p className="muted">{text.noEligibleJobs}</p>}<JobRequirementsTable progression={jobProgression} locale={locale} text={text}/></div>}
-          {state.areas.map((area) => <div className="location_row" key={area.id}><div><strong>{contentText(area.name, locale)}</strong><p>{contentText(area.description, locale)}</p><small>{text.recommendedLevel}: {area.required_level}</small></div><button disabled={busy || state.player!.level < area.required_level} onClick={() => void battleArea(area.id)}>{text.enter}</button></div>)}
+          {state.areas.map((area) => <div className="location_row" key={area.id}><div><strong>{contentText(area.name, locale)}</strong><p>{contentText(area.description, locale)}</p>{area.name !== "冒險探索" && <small>{text.recommendedLevel}: {area.required_level}</small>}</div><button disabled={busy || state.player!.level < area.required_level} onClick={() => void battleArea(area.id)}>{text.enter}</button></div>)}
           {outskirts.map(([name, description]) => <div className="location_row placeholder_location" key={name}><div><strong>{name}</strong><p>{description}</p></div><button type="button" className="display_only_button">{text.enter}</button></div>)}
         </section>
 
